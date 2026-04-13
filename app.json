@@ -4,7 +4,6 @@
     "slug": "pitstop-mobile",
     "version": "0.1.0",
     "orientation": "default",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -17,10 +16,6 @@
       "bundleIdentifier": "com.pitstop.mobile"
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#03030A"
-      },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.pitstop.mobile"

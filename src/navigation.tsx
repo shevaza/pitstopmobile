@@ -32,16 +32,16 @@ const screenRegistry: Array<{
   title: string;
   component: ComponentType<any>;
 }> = [
-  { key: "dashboard", name: "Dashboard", title: "Dashboard", component: DashboardScreen },
-  { key: "users", name: "Users", title: "Users", component: UsersScreen },
-  { key: "bulk", name: "Bulk", title: "Bulk", component: BulkScreen },
-  { key: "orgchart", name: "Org Chart", title: "Org Chart", component: OrgChartScreen },
-  { key: "hr", name: "HR", title: "HR", component: HrScreen },
-  { key: "attendance", name: "Attendance", title: "Attendance", component: AttendanceScreen },
-  { key: "assets", name: "Assets", title: "Assets", component: AssetsScreen },
-  { key: "user-access", name: "User Access", title: "User Access", component: UserAccessScreen },
-  { key: "settings", name: "Settings", title: "Settings", component: SettingsScreen },
-];
+    { key: "dashboard", name: "Dashboard", title: "Dashboard", component: DashboardScreen },
+    { key: "users", name: "Users", title: "Users", component: UsersScreen },
+    { key: "bulk", name: "Bulk", title: "Bulk", component: BulkScreen },
+    { key: "orgchart", name: "Org Chart", title: "Org Chart", component: OrgChartScreen },
+    { key: "hr", name: "HR", title: "HR", component: HrScreen },
+    { key: "attendance", name: "Attendance", title: "Attendance", component: AttendanceScreen },
+    { key: "assets", name: "Assets", title: "Assets", component: AssetsScreen },
+    { key: "user-access", name: "User Access", title: "User Access", component: UserAccessScreen },
+    { key: "settings", name: "Settings", title: "Settings", component: SettingsScreen },
+  ];
 
 function getInitials(value?: string) {
   if (!value) return "?";
@@ -104,11 +104,11 @@ function DrawerNavigator() {
   const displayName = session?.name || session?.upn;
   const photoSource = session?.accessToken
     ? {
-        uri: "https://graph.microsoft.com/v1.0/me/photo/$value",
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      }
+      uri: "https://graph.microsoft.com/v1.0/me/photo/$value",
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    }
     : null;
 
   return (
@@ -165,9 +165,9 @@ function DrawerNavigator() {
               </Text>
             );
           })}
-          <View style={{ marginTop: "auto", paddingBottom: 24 }}>
-            <Text style={{ color: theme.colors.text, fontSize: 16 }} onPress={() => void signOut()}>
-              Sign out
+          <View style={{ marginTop: "auto", paddingVertical: 19, marginBottom: 24, backgroundColor: theme.colors.danger }}>
+            <Text style={{ color: theme.colors.text, fontSize: 16, textAlign: "center" }} onPress={() => void signOut()}>
+              Sign Out
             </Text>
           </View>
         </View>

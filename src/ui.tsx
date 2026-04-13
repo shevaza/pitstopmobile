@@ -20,12 +20,14 @@ export function Screen({
   title,
   subtitle,
   scroll = true,
+  includeTopInset = false,
   children,
   right,
 }: PropsWithChildren<{
   title: string;
   subtitle?: string;
   scroll?: boolean;
+  includeTopInset?: boolean;
   right?: ReactNode;
 }>) {
   const content = (
@@ -48,7 +50,7 @@ export function Screen({
       end={{ x: 0.9, y: 0.9 }}
       style={{ flex: 1 }}
     >
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={includeTopInset ? ["top", "left", "right", "bottom"] : ["left", "right", "bottom"]}>
         {scroll ? (
           <ScrollView contentContainerStyle={styles.scrollContent}>{content}</ScrollView>
         ) : (
@@ -204,7 +206,7 @@ export function InlineLabel({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollContent: { padding: theme.spacing.md, gap: theme.spacing.md },
-  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: "700" },
   subtitle: { color: "rgba(255,255,255,0.7)", marginTop: 6, lineHeight: 20 },
   card: {

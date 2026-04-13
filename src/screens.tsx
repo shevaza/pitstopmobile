@@ -3,7 +3,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import Papa from "papaparse";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useAuth } from "./auth";
 import { theme } from "./theme";
@@ -50,7 +50,8 @@ export function LoginScreen() {
   const { signIn } = useAuth();
 
   return (
-    <Screen title="PitStop 2.0" subtitle="Use your Microsoft 365 account to continue from Expo Go." scroll={false}>
+      <Screen title="PitStop 2.0" subtitle="Welcome to Pitstop 2.0 developed internally by ITCAN Solutions for Company General Management." scroll={false} includeTopInset>
+      <Image source={require("../assets/icon.png")} style={styles.loginLogo} resizeMode="contain" />
       <Card style={{ marginTop: 12 }}>
         <Text style={styles.heroText}>
           This mobile workspace keeps the current modules and API workflows, while delegating the server-side work to the existing backend.
@@ -1249,7 +1250,9 @@ export function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  loginLogo: { maxWidth: 300, height: 160, alignSelf: "center", marginBottom: 6 },
   heroText: { color: "rgba(255,255,255,0.78)", lineHeight: 22 },
+  titleText: { color: theme.colors.text, fontSize: 30, fontWeight: "700", marginBottom: 6 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   row: { flexDirection: "row", gap: 12, alignItems: "center" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
