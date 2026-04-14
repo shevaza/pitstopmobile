@@ -4,6 +4,7 @@
     "slug": "pitstop-mobile",
     "version": "0.1.0",
     "orientation": "default",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -12,13 +13,18 @@
       "backgroundColor": "#03030A"
     },
     "ios": {
+      "icon": "./assets/icon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.pitstop.mobile"
     },
     "android": {
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.pitstop.mobile"
+      "package": "com.pitstop.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#03030A"
+      }
     },
     "scheme": "pitstopmobile",
     "web": {
