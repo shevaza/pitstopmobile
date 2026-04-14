@@ -23,6 +23,11 @@
     "scheme": "pitstopmobile",
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "821d6c4f-4a4e-4a5a-9b32-7ae2d683f771"
+      }
     }
   }
 }
