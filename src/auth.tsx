@@ -42,6 +42,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const tenantId = process.env.EXPO_PUBLIC_AZURE_AD_TENANT_ID;
 const clientId = process.env.EXPO_PUBLIC_AZURE_AD_CLIENT_ID;
 const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+const configuredRedirectUri = process.env.EXPO_PUBLIC_AZURE_AD_REDIRECT_URI;
+const defaultRedirectUri = "pitstopmobile://auth";
 
 function requireConfig(value: string | undefined, name: string) {
   if (!value) {
@@ -56,6 +58,10 @@ function buildDiscovery() {
     authorizationEndpoint: `https://login.microsoftonline.com/${resolvedTenantId}/oauth2/v2.0/authorize`,
     tokenEndpoint: `https://login.microsoftonline.com/${resolvedTenantId}/oauth2/v2.0/token`,
   };
+}
+
+function buildRedirectUri() {
+  return configuredRedirectUri || defaultRedirectUri;
 }
 
 function parseSession(idToken: string, accessToken?: string): StoredSession | null {
@@ -167,7 +173,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signIn = async () => {
     try {
-      const redirectUri = AuthSession.makeRedirectUri({ scheme: "pitstopmobile" });
+      const redirectUri = buildRedirectUri();
       const discovery = buildDiscovery();
       const resolvedClientId = requireConfig(clientId, "EXPO_PUBLIC_AZURE_AD_CLIENT_ID");
       const request = new AuthSession.AuthRequest({
