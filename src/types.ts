@@ -25,6 +25,13 @@ export type UserRecord = {
   accountEnabled?: boolean;
 };
 
+export type UsersSyncResult = {
+  fetched: number;
+  upserted: number;
+  pages: number;
+  syncedAt: string;
+};
+
 export type AssetRecord = {
   id: string;
   asset_tag: string;

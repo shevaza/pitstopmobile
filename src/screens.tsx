@@ -7,7 +7,7 @@ import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from "react-n
 import { Picker } from "@react-native-picker/picker";
 import { useAuth } from "./auth";
 import { theme } from "./theme";
-import { AppModuleKey, AssetRecord, AttendanceResponse, Metrics, UserRecord } from "./types";
+import { AppModuleKey, AssetRecord, AttendanceResponse, Metrics, UserRecord, UsersSyncResult } from "./types";
 import { csvEscape, displayValue, formatDate, normalizeText } from "./utils";
 import {
   AppButton,
@@ -51,7 +51,7 @@ export function LoginScreen() {
 
   return (
       <Screen title="PitStop 2.0" subtitle="Welcome to Pitstop 2.0 developed internally by ITCAN Solutions for Company General Management." scroll={false} includeTopInset>
-      <Image source={require("../assets/icon.png")} style={styles.loginLogo} resizeMode="contain" />
+      <Image source={require("../assets/splash-icon.png")} style={styles.loginLogo} resizeMode="contain" />
       <Card style={{ marginTop: 12 }}>
         <Text style={styles.heroText}>
           This mobile workspace keeps the current modules and API workflows, while delegating the server-side work to the existing backend.
@@ -152,6 +152,7 @@ export function UsersScreen({ navigation }: any) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [nextToken, setNextToken] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
 
@@ -215,15 +216,39 @@ export function UsersScreen({ navigation }: any) {
     await Sharing.shareAsync(fileUri);
   };
 
+  const syncUsers = async () => {
+    setSyncing(true);
+    try {
+      const response = await apiFetch("/api/users/sync", {
+        method: "POST",
+      });
+      const json = (await response.json().catch(() => null)) as UsersSyncResult | { error?: string } | null;
+      if (!response.ok) {
+        throw new Error((json && "error" in json && json.error) || "Failed to sync users");
+      }
+
+      const result = json as UsersSyncResult;
+      await load(true);
+      Alert.alert("Users", `Synced ${result.upserted} users to Supabase on ${formatDate(result.syncedAt)}.`);
+    } catch (error) {
+      Alert.alert("Users", error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
-    <Screen title="Users" subtitle="Directory search, filtering, and drill-in editing." right={<AppButton label="Refresh" onPress={() => void load(true)} disabled={loading} />}>
+    <Screen title="Users" subtitle="Directory search, filtering, and drill-in editing." right={<AppButton label={loading ? "Refreshing..." : "Refresh"} onPress={() => void load(true)} disabled={loading || syncing} />}>
       <Card>
         <Field label="Directory search">
           <AppInput value={search} onChangeText={setSearch} placeholder="Search display name or exact UPN" />
         </Field>
         <View style={styles.row}>
           <AppButton label={loading ? "Loading..." : "Search"} onPress={() => void load(true)} variant="primary" style={{ flex: 1 }} />
-          <AppButton label="Share CSV" onPress={() => void shareUsers()} style={{ flex: 1 }} />
+          <AppButton label={syncing ? "Syncing..." : "Sync Supabase"} onPress={() => void syncUsers()} variant="success" disabled={loading || syncing} style={{ flex: 1 }} />
+        </View>
+        <View style={styles.row}>
+          <AppButton label="Share CSV" onPress={() => void shareUsers()} disabled={syncing} style={{ flex: 1 }} />
         </View>
         <Field label="Filter loaded results">
           <AppInput value={filter} onChangeText={setFilter} placeholder="Filter by title, department, or name" />
