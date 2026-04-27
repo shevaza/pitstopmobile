@@ -245,14 +245,17 @@ export function UsersScreen({ navigation }: any) {
         </Field>
         <View style={styles.row}>
           <AppButton label={loading ? "Loading..." : "Search"} onPress={() => void load(true)} variant="primary" style={{ flex: 1 }} />
-          <AppButton label={syncing ? "Syncing..." : "Sync Supabase"} onPress={() => void syncUsers()} variant="success" disabled={loading || syncing} style={{ flex: 1 }} />
+          <AppButton label={syncing ? "Syncing..." : "Sync Users"} onPress={() => void syncUsers()} variant="success" disabled={loading || syncing} style={{ flex: 1 }} />
         </View>
         <View style={styles.row}>
-          <AppButton label="Share CSV" onPress={() => void shareUsers()} disabled={syncing} style={{ flex: 1 }} />
+          <AppButton label="Share CSV" onPress={() => void shareUsers()} disabled={syncing} style={{ flex: 1 }} variant="default" />
         </View>
+        <View style={{ paddingVertical: 6 }}>
         <Field label="Filter loaded results">
           <AppInput value={filter} onChangeText={setFilter} placeholder="Filter by title, department, or name" />
         </Field>
+        </View>
+        <View style={{ paddingVertical: 6 }}>
         <Field label="Status">
           <Picker selectedValue={statusFilter} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setStatusFilter(value)}>
             <Picker.Item label="All" value="all" />
@@ -260,6 +263,7 @@ export function UsersScreen({ navigation }: any) {
             <Picker.Item label="Disabled" value="disabled" />
           </Picker>
         </Field>
+        </View>
       </Card>
 
       {filtered.length ? filtered.map((user) => (
@@ -854,7 +858,7 @@ export function AssetsScreen({ navigation }: any) {
         <Field label="Search assets">
           <AppInput value={search} onChangeText={setSearch} placeholder="Search tags, names, users, serials..." />
         </Field>
-        <AppButton label={loading ? "Refreshing..." : "Refresh"} onPress={() => void load()} />
+        <AppButton label={loading ? "Refreshing..." : "Refresh"} style={{ marginTop: 12 }} onPress={() => void load()} />
       </Card>
 
       {formOpen ? (
@@ -1279,7 +1283,7 @@ const styles = StyleSheet.create({
   heroText: { color: "rgba(255,255,255,0.78)", lineHeight: 22 },
   titleText: { color: theme.colors.text, fontSize: 30, fontWeight: "700", marginBottom: 6 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  row: { flexDirection: "row", gap: 12, alignItems: "center" },
+  row: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 6 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   itemTitle: { color: theme.colors.text, fontSize: 16, fontWeight: "600" },
   metaText: { color: "rgba(255,255,255,0.66)", lineHeight: 20 },
