@@ -54,6 +54,8 @@ function createAssetForm(assetGroup: string = assetGroups[0]): AssetFormState {
     assetGroup,
     assetType: "",
     status: "active",
+    quantity: "1",
+    location: "",
     serialNumber: "",
     manufacturer: "",
     model: "",
@@ -827,6 +829,7 @@ export function AssetsScreen({ navigation }: any) {
         asset.asset_tag,
         asset.asset_group,
         asset.asset_type,
+        asset.location,
         asset.serial_number,
         asset.manufacturer,
         asset.model,
@@ -892,6 +895,12 @@ export function AssetsScreen({ navigation }: any) {
               ))}
             </Picker>
           </Field>
+          <Field label="Qty">
+            <AppInput value={form.quantity} onChangeText={(value) => setForm((current) => ({ ...current, quantity: value }))} keyboardType="numeric" />
+          </Field>
+          <Field label="Location">
+            <AppInput value={form.location} onChangeText={(value) => setForm((current) => ({ ...current, location: value }))} placeholder="Storage room, office, shelf..." />
+          </Field>
           <Field label="Serial Number">
             <AppInput value={form.serialNumber} onChangeText={(value) => setForm((current) => ({ ...current, serialNumber: value }))} />
           </Field>
@@ -928,7 +937,10 @@ export function AssetsScreen({ navigation }: any) {
                 <Text style={styles.itemTitle}>{asset.name}</Text>
                 <Text style={styles.metaText}>{asset.asset_tag}</Text>
                 <Text style={styles.metaText}>
-                  {displayValue(asset.asset_type, "-")} | {displayValue(asset.assigned_user?.display_name || asset.assigned_user?.user_principal_name, "Unassigned")}
+                  {displayValue(asset.asset_type, "-")} | Qty {asset.quantity ?? 1} | {displayValue(asset.location, "No location")}
+                </Text>
+                <Text style={styles.metaText}>
+                  {displayValue(asset.assigned_user?.display_name || asset.assigned_user?.user_principal_name, "Unassigned")}
                 </Text>
               </View>
               <Badge label={asset.status} tone="info" />
@@ -963,6 +975,8 @@ export function AssetDetailScreen({ route, navigation }: any) {
       assetGroup: nextAsset.asset_group && nextGroups.includes(nextAsset.asset_group) ? nextAsset.asset_group : nextGroups[0] ?? assetGroups[0],
       assetType: nextAsset.asset_type,
       status: nextAsset.status,
+      quantity: String(nextAsset.quantity ?? 1),
+      location: nextAsset.location ?? "",
       serialNumber: nextAsset.serial_number ?? "",
       manufacturer: nextAsset.manufacturer ?? "",
       model: nextAsset.model ?? "",
@@ -1047,6 +1061,8 @@ export function AssetDetailScreen({ route, navigation }: any) {
         ["assetTag", "Asset Tag"],
         ["name", "Name"],
         ["assetType", "Type"],
+        ["quantity", "Qty"],
+        ["location", "Location"],
         ["serialNumber", "Serial Number"],
         ["manufacturer", "Manufacturer"],
         ["model", "Model"],

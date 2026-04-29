@@ -39,6 +39,8 @@ export type AssetRecord = {
   asset_group?: string | null;
   asset_type: string;
   status: string;
+  quantity?: number | null;
+  location?: string | null;
   serial_number?: string | null;
   manufacturer?: string | null;
   model?: string | null;
@@ -95,6 +97,8 @@ export type AssetFormState = {
   assetGroup: string;
   assetType: string;
   status: string;
+  quantity: string;
+  location: string;
   serialNumber: string;
   manufacturer: string;
   model: string;
