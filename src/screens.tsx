@@ -6,8 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useAuth } from "./auth";
+import { assetGroups, getAssetGroupsFromApi } from "./assetGroups";
 import { theme } from "./theme";
-import { AppModuleKey, AssetRecord, AttendanceResponse, Metrics, UserRecord, UsersSyncResult } from "./types";
+import { AppModuleKey, AssetFormState, AssetRecord, AttendanceResponse, Metrics, UserRecord, UsersSyncResult } from "./types";
 import { csvEscape, displayValue, formatDate, normalizeText } from "./utils";
 import {
   AppButton,
@@ -44,6 +45,20 @@ function StatCard({ title, value }: { title: string; value: number }) {
       <Text style={styles.bigNumber}>{value}</Text>
     </Card>
   );
+}
+
+function createAssetForm(assetGroup: string = assetGroups[0]): AssetFormState {
+  return {
+    assetTag: "",
+    name: "",
+    assetGroup,
+    assetType: "",
+    status: "active",
+    serialNumber: "",
+    manufacturer: "",
+    model: "",
+    notes: "",
+  };
 }
 
 export function LoginScreen() {
@@ -751,23 +766,14 @@ export function AttendanceScreen() {
 export function AssetsScreen({ navigation }: any) {
   const { apiFetch } = useAuth();
   const [assets, setAssets] = useState<AssetRecord[]>([]);
+  const [allowedAssetGroups, setAllowedAssetGroups] = useState<string[]>([...assetGroups]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [userResults, setUserResults] = useState<UserRecord[]>([]);
-  const [form, setForm] = useState({
-    assetTag: "",
-    name: "",
-    assetGroup: "",
-    assetType: "",
-    status: "active",
-    serialNumber: "",
-    manufacturer: "",
-    model: "",
-    notes: "",
-  });
+  const [form, setForm] = useState<AssetFormState>(() => createAssetForm());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -776,6 +782,12 @@ export function AssetsScreen({ navigation }: any) {
       if (!response.ok) throw new Error((await response.text()) || "Failed to load assets");
       const json = await response.json();
       setAssets(Array.isArray(json.items) ? json.items : []);
+      const nextGroups = getAssetGroupsFromApi(json.assetGroups);
+      setAllowedAssetGroups(nextGroups);
+      setForm((current) => ({
+        ...current,
+        assetGroup: nextGroups.includes(current.assetGroup) ? current.assetGroup : nextGroups[0] ?? assetGroups[0],
+      }));
     } catch (error) {
       Alert.alert("Assets", error instanceof Error ? error.message : "Unknown error");
     } finally {
@@ -835,17 +847,7 @@ export function AssetsScreen({ navigation }: any) {
       setFormOpen(false);
       setSelectedUser(null);
       setUserSearch("");
-      setForm({
-        assetTag: "",
-        name: "",
-        assetGroup: "",
-        assetType: "",
-        status: "active",
-        serialNumber: "",
-        manufacturer: "",
-        model: "",
-        notes: "",
-      });
+      setForm(createAssetForm(allowedAssetGroups[0] ?? assetGroups[0]));
       await load();
     } catch (error) {
       Alert.alert("Assets", error instanceof Error ? error.message : "Unknown error");
@@ -853,7 +855,10 @@ export function AssetsScreen({ navigation }: any) {
   };
 
   return (
-    <Screen title="Assets" subtitle="Inventory search, assignment, and asset creation." right={<AppButton label="New" variant="primary" onPress={() => setFormOpen((current) => !current)} />}>
+    <Screen title="Assets" subtitle="Inventory search, assignment, and asset creation." right={<AppButton label="New" variant="primary" onPress={() => {
+      setForm((current) => ({ ...current, assetGroup: allowedAssetGroups.includes(current.assetGroup) ? current.assetGroup : allowedAssetGroups[0] ?? assetGroups[0] }));
+      setFormOpen((current) => !current);
+    }} />}>
       <Card>
         <Field label="Search assets">
           <AppInput value={search} onChangeText={setSearch} placeholder="Search tags, names, users, serials..." />
@@ -871,7 +876,11 @@ export function AssetsScreen({ navigation }: any) {
             <AppInput value={form.name} onChangeText={(value) => setForm((current) => ({ ...current, name: value }))} />
           </Field>
           <Field label="Group">
-            <AppInput value={form.assetGroup} onChangeText={(value) => setForm((current) => ({ ...current, assetGroup: value }))} />
+            <Picker selectedValue={form.assetGroup} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => ({ ...current, assetGroup: value }))}>
+              {allowedAssetGroups.map((group) => (
+                <Picker.Item key={group} label={group} value={group} />
+              ))}
+            </Picker>
           </Field>
           <Field label="Type">
             <AppInput value={form.assetType} onChangeText={(value) => setForm((current) => ({ ...current, assetType: value }))} />
@@ -934,7 +943,8 @@ export function AssetsScreen({ navigation }: any) {
 export function AssetDetailScreen({ route, navigation }: any) {
   const { apiFetch } = useAuth();
   const [asset, setAsset] = useState<AssetRecord | null>(null);
-  const [form, setForm] = useState<any>(null);
+  const [form, setForm] = useState<AssetFormState | null>(null);
+  const [allowedAssetGroups, setAllowedAssetGroups] = useState<string[]>([...assetGroups]);
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [userResults, setUserResults] = useState<UserRecord[]>([]);
@@ -944,11 +954,13 @@ export function AssetDetailScreen({ route, navigation }: any) {
     if (!response.ok) throw new Error((await response.text()) || "Failed to load asset");
     const json = await response.json();
     const nextAsset = json.asset as AssetRecord;
+    const nextGroups = getAssetGroupsFromApi(json.assetGroups);
+    setAllowedAssetGroups(nextGroups);
     setAsset(nextAsset);
     setForm({
       assetTag: nextAsset.asset_tag,
       name: nextAsset.name,
-      assetGroup: nextAsset.asset_group ?? "",
+      assetGroup: nextAsset.asset_group && nextGroups.includes(nextAsset.asset_group) ? nextAsset.asset_group : nextGroups[0] ?? assetGroups[0],
       assetType: nextAsset.asset_type,
       status: nextAsset.status,
       serialNumber: nextAsset.serial_number ?? "",
@@ -1034,7 +1046,6 @@ export function AssetDetailScreen({ route, navigation }: any) {
       {[
         ["assetTag", "Asset Tag"],
         ["name", "Name"],
-        ["assetGroup", "Group"],
         ["assetType", "Type"],
         ["serialNumber", "Serial Number"],
         ["manufacturer", "Manufacturer"],
@@ -1042,14 +1053,24 @@ export function AssetDetailScreen({ route, navigation }: any) {
       ].map(([key, label]) => (
         <Card key={key}>
           <Field label={label}>
-            <AppInput value={form[key] ?? ""} onChangeText={(value) => setForm((current: any) => ({ ...current, [key]: value }))} />
+            <AppInput value={form[key as keyof AssetFormState] ?? ""} onChangeText={(value) => setForm((current) => current ? { ...current, [key]: value } : current)} />
           </Field>
         </Card>
       ))}
 
       <Card>
+        <Field label="Group">
+          <Picker selectedValue={form.assetGroup} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => current ? { ...current, assetGroup: value } : current)}>
+            {allowedAssetGroups.map((group) => (
+              <Picker.Item key={group} label={group} value={group} />
+            ))}
+          </Picker>
+        </Field>
+      </Card>
+
+      <Card>
         <Field label="Status">
-          <Picker selectedValue={form.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current: any) => ({ ...current, status: value }))}>
+          <Picker selectedValue={form.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => current ? { ...current, status: value } : current)}>
             {["active", "in-stock", "repair", "retired"].map((status) => (
               <Picker.Item key={status} label={status} value={status} />
             ))}
@@ -1074,7 +1095,7 @@ export function AssetDetailScreen({ route, navigation }: any) {
 
       <Card>
         <Field label="Notes">
-          <AppInput value={form.notes ?? ""} onChangeText={(value) => setForm((current: any) => ({ ...current, notes: value }))} multiline />
+          <AppInput value={form.notes ?? ""} onChangeText={(value) => setForm((current) => current ? { ...current, notes: value } : current)} multiline />
         </Field>
       </Card>
     </Screen>
@@ -1097,6 +1118,7 @@ export function UserAccessScreen() {
     "user-access": false,
     settings: false,
   });
+  const [assetGroupAccess, setAssetGroupAccess] = useState<string[]>([...assetGroups]);
 
   useEffect(() => {
     if (!search.trim()) {
@@ -1127,10 +1149,16 @@ export function UserAccessScreen() {
     }
     const json = await response.json();
     setAccess(json.access ?? access);
+    setAssetGroupAccess(getAssetGroupsFromApi(json.assetGroups));
   };
 
   const save = async () => {
     if (!selectedUser) return;
+    if (access.assets && assetGroupAccess.length === 0) {
+      Alert.alert("User Access", "Select at least one asset group.");
+      return;
+    }
+
     const response = await apiFetch("/api/user-access", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1138,6 +1166,7 @@ export function UserAccessScreen() {
         userPrincipalName: selectedUser.userPrincipalName,
         displayName: selectedUser.displayName,
         access,
+        assetGroups: assetGroupAccess,
       }),
     });
     if (!response.ok) {
@@ -1174,12 +1203,44 @@ export function UserAccessScreen() {
         <Card>
           <SectionTitle>{selectedUser.displayName || selectedUser.userPrincipalName}</SectionTitle>
           {(Object.keys(access) as AppModuleKey[]).map((moduleKey) => (
-            <View key={moduleKey} style={styles.rowBetween}>
-              <Text style={styles.itemTitle}>{moduleKey}</Text>
-              <Switch value={access[moduleKey]} onValueChange={(value) => setAccess((current) => ({ ...current, [moduleKey]: value }))} />
+            <View key={moduleKey}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.itemTitle}>{moduleKey}</Text>
+                <Switch
+                  value={access[moduleKey]}
+                  onValueChange={(value) => {
+                    setAccess((current) => ({ ...current, [moduleKey]: value }));
+                    if (moduleKey === "assets") {
+                      setAssetGroupAccess(value ? [...assetGroups] : []);
+                    }
+                  }}
+                />
+              </View>
+              {moduleKey === "assets" && access.assets ? (
+                <View style={styles.accessGroupBox}>
+                  <Text style={styles.metaText}>Asset groups</Text>
+                  {assetGroups.map((group) => (
+                    <View key={group} style={styles.rowBetween}>
+                      <Text style={styles.metaText}>{group}</Text>
+                      <Switch
+                        value={assetGroupAccess.includes(group)}
+                        onValueChange={(value) => {
+                          setAssetGroupAccess((current) => {
+                            if (value) return current.includes(group) ? current : [...current, group];
+                            return current.filter((item) => item !== group);
+                          });
+                        }}
+                      />
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ))}
-          <AppButton label="Save Access" onPress={() => void save()} variant="primary" style={{ marginTop: 12 }} />
+          {access.assets && !assetGroupAccess.length ? (
+            <Text style={[styles.metaText, { marginTop: 8 }]}>Select at least one asset group.</Text>
+          ) : null}
+          <AppButton label="Save Access" onPress={() => void save()} variant="primary" disabled={access.assets && !assetGroupAccess.length} style={{ marginTop: 12 }} />
         </Card>
       ) : null}
     </Screen>
@@ -1288,6 +1349,7 @@ const styles = StyleSheet.create({
   itemTitle: { color: theme.colors.text, fontSize: 16, fontWeight: "600" },
   metaText: { color: "rgba(255,255,255,0.66)", lineHeight: 20 },
   listItem: { flexDirection: "row", alignItems: "center", gap: 12 },
+  accessGroupBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,0.14)", gap: 8, marginTop: 10, paddingTop: 10 },
   bigNumber: { color: theme.colors.text, fontSize: 34, fontWeight: "700", marginVertical: 8 },
   departmentRow: { gap: 10, marginTop: 12 },
   barTrack: { height: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },

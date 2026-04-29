@@ -88,3 +88,15 @@ export type AttendanceResponse = {
   report?: { id: string; name: string };
   availableReports?: { id: string; name: string }[];
 };
+
+export type AssetFormState = {
+  assetTag: string;
+  name: string;
+  assetGroup: string;
+  assetType: string;
+  status: string;
+  serialNumber: string;
+  manufacturer: string;
+  model: string;
+  notes: string;
+};
