@@ -12,6 +12,8 @@ import {
   BulkScreen,
   DashboardScreen,
   HrScreen,
+  ItTicketsAdminScreen,
+  ItTicketsScreen,
   LoginScreen,
   OrgChartScreen,
   RootStackParamList,
@@ -39,6 +41,8 @@ const screenRegistry: Array<{
     { key: "hr", name: "HR", title: "HR", component: HrScreen },
     { key: "attendance", name: "Attendance", title: "Attendance", component: AttendanceScreen },
     { key: "assets", name: "Assets", title: "Assets", component: AssetsScreen },
+    { key: "it-tickets", name: "IT Tickets", title: "IT Tickets", component: ItTicketsScreen },
+    { key: "it-tickets-admin", name: "IT Tickets Admin", title: "IT Tickets Admin", component: ItTicketsAdminScreen },
     { key: "user-access", name: "User Access", title: "User Access", component: UserAccessScreen },
     { key: "settings", name: "Settings", title: "Settings", component: SettingsScreen },
   ];

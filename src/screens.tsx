@@ -1,5 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
 import * as Sharing from "expo-sharing";
 import Papa from "papaparse";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,7 +9,7 @@ import { Picker } from "@react-native-picker/picker";
 import { useAuth } from "./auth";
 import { assetGroups, getAssetGroupsFromApi } from "./assetGroups";
 import { theme } from "./theme";
-import { AppModuleKey, AssetFormState, AssetRecord, AttendanceResponse, Metrics, UserRecord, UsersSyncResult } from "./types";
+import { AppModuleKey, AssetFormState, AssetRecord, AttendanceResponse, Metrics, ModuleAccessLevel, TicketAttachment, TicketAttachmentInput, TicketRecord, UserRecord, UsersSyncResult, appModules, getDefaultModuleAccess, getDefaultModuleAccessLevels, getMissingModuleKeys, normalizeModuleAccess, normalizeModuleAccessLevels } from "./types";
 import { csvEscape, displayValue, formatDate, normalizeText } from "./utils";
 import {
   AppButton,
@@ -61,6 +62,85 @@ function createAssetForm(assetGroup: string = assetGroups[0]): AssetFormState {
     model: "",
     notes: "",
   };
+}
+
+const ticketPriorities: TicketRecord["priority"][] = ["low", "medium", "high", "urgent"];
+const ticketStatuses: TicketRecord["status"][] = ["open", "in-progress", "waiting-user", "resolved", "closed"];
+
+function ticketStatusTone(status: TicketRecord["status"]) {
+  if (status === "resolved" || status === "closed") return "success";
+  if (status === "waiting-user") return "warning";
+  if (status === "in-progress") return "info";
+  return "default";
+}
+
+function AccessLevelPicker({ value, onChange }: { value: ModuleAccessLevel; onChange: (value: ModuleAccessLevel) => void }) {
+  const options: Array<{ value: ModuleAccessLevel; label: string }> = [
+    { value: "none", label: "None" },
+    { value: "read", label: "Read" },
+    { value: "modify", label: "Modify" },
+  ];
+
+  return (
+    <View style={styles.accessLevelPicker}>
+      {options.map((option) => (
+        <Pressable
+          key={option.value}
+          onPress={() => onChange(option.value)}
+          style={[
+            styles.accessLevelOption,
+            value === option.value ? styles.accessLevelOptionActive : null,
+          ]}
+        >
+          <Text style={[styles.accessLevelText, value === option.value ? styles.accessLevelTextActive : null]}>
+            {option.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+async function pickTicketImage(source: "library" | "camera"): Promise<TicketAttachmentInput | null> {
+  const permission = source === "camera"
+    ? await ImagePicker.requestCameraPermissionsAsync()
+    : await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) {
+    Alert.alert("Images", source === "camera" ? "Camera permission is required." : "Photo library permission is required.");
+    return null;
+  }
+
+  const result = source === "camera"
+    ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.7, base64: true })
+    : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7, base64: true });
+  if (result.canceled || !result.assets[0]?.base64) return null;
+
+  const asset = result.assets[0];
+  const mimeType = asset.mimeType || "image/jpeg";
+  return {
+    fileName: asset.fileName || `ticket-image-${Date.now()}.jpg`,
+    mimeType,
+    dataUrl: `data:${mimeType};base64,${asset.base64}`,
+  };
+}
+
+function AttachmentStrip({ attachments }: { attachments?: Array<TicketAttachment | TicketAttachmentInput> }) {
+  if (!attachments?.length) return null;
+  return (
+    <View style={styles.attachmentGrid}>
+      {attachments.map((attachment, index) => {
+        const dataUrl = "data_url" in attachment ? attachment.data_url : attachment.dataUrl;
+        const name = "file_name" in attachment ? attachment.file_name : attachment.fileName;
+        const key = "id" in attachment ? attachment.id : `${name}-${index}`;
+        return (
+          <View key={key} style={styles.attachmentItem}>
+            <Image source={{ uri: dataUrl }} style={styles.attachmentImage} resizeMode="cover" />
+            <Text style={styles.attachmentName} numberOfLines={1}>{name}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 export function LoginScreen() {
@@ -164,7 +244,7 @@ export function DashboardScreen() {
 }
 
 export function UsersScreen({ navigation }: any) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, moduleAccessLevel } = useAuth();
   const [items, setItems] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
@@ -172,6 +252,7 @@ export function UsersScreen({ navigation }: any) {
   const [syncing, setSyncing] = useState(false);
   const [nextToken, setNextToken] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const canModifyUsers = moduleAccessLevel.users === "modify";
 
   const load = useCallback(async (reset = true, cursor?: string | null) => {
     setLoading(true);
@@ -255,14 +336,16 @@ export function UsersScreen({ navigation }: any) {
   };
 
   return (
-    <Screen title="Users" subtitle="Directory search, filtering, and drill-in editing." right={<AppButton label={loading ? "Refreshing..." : "Refresh"} onPress={() => void load(true)} disabled={loading || syncing} />}>
+    <Screen title="Users" subtitle={canModifyUsers ? "Directory search, filtering, and drill-in editing." : "Directory search and filtering."} right={<AppButton label={loading ? "Refreshing..." : "Refresh"} onPress={() => void load(true)} disabled={loading || syncing} />}>
       <Card>
         <Field label="Directory search">
           <AppInput value={search} onChangeText={setSearch} placeholder="Search display name or exact UPN" />
         </Field>
         <View style={styles.row}>
           <AppButton label={loading ? "Loading..." : "Search"} onPress={() => void load(true)} variant="primary" style={{ flex: 1 }} />
-          <AppButton label={syncing ? "Syncing..." : "Sync Users"} onPress={() => void syncUsers()} variant="success" disabled={loading || syncing} style={{ flex: 1 }} />
+          {canModifyUsers ? (
+            <AppButton label={syncing ? "Syncing..." : "Sync Users"} onPress={() => void syncUsers()} variant="success" disabled={loading || syncing} style={{ flex: 1 }} />
+          ) : null}
         </View>
         <View style={styles.row}>
           <AppButton label="Share CSV" onPress={() => void shareUsers()} disabled={syncing} style={{ flex: 1 }} variant="default" />
@@ -283,8 +366,8 @@ export function UsersScreen({ navigation }: any) {
         </View>
       </Card>
 
-      {filtered.length ? filtered.map((user) => (
-        <Pressable key={user.id} onPress={() => navigation.navigate("UserDetail", { id: user.id })}>
+      {filtered.length ? filtered.map((user) => {
+        const content = (
           <Card>
             <View style={styles.listItem}>
               <View style={{ flex: 1 }}>
@@ -297,8 +380,15 @@ export function UsersScreen({ navigation }: any) {
               <Badge label={user.accountEnabled ? "Enabled" : "Disabled"} tone={user.accountEnabled ? "success" : "danger"} />
             </View>
           </Card>
-        </Pressable>
-      )) : loading ? <LoadingBlock label="Loading users..." /> : <EmptyBlock label="No users match the current filters." />}
+        );
+        return canModifyUsers ? (
+          <Pressable key={user.id} onPress={() => navigation.navigate("UserDetail", { id: user.id })}>
+            {content}
+          </Pressable>
+        ) : (
+          <View key={user.id}>{content}</View>
+        );
+      }) : loading ? <LoadingBlock label="Loading users..." /> : <EmptyBlock label="No users match the current filters." />}
 
       <AppButton label={loading ? "Loading..." : nextToken ? "Load more" : "No more users"} onPress={() => void load(false, nextToken)} disabled={!nextToken || loading} />
     </Screen>
@@ -306,11 +396,12 @@ export function UsersScreen({ navigation }: any) {
 }
 
 export function UserDetailScreen({ route }: any) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, moduleAccessLevel } = useAuth();
   const [user, setUser] = useState<UserRecord | null>(null);
   const [manager, setManager] = useState<{ userPrincipalName?: string; displayName?: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const canModifyUsers = moduleAccessLevel.users === "modify";
 
   const load = useCallback(async () => {
     const response = await apiFetch(`/api/users/${encodeURIComponent(route.params.id)}`);
@@ -335,8 +426,17 @@ export function UserDetailScreen({ route }: any) {
   }, [apiFetch, route.params.id]);
 
   useEffect(() => {
+    if (!canModifyUsers) return;
     void load().catch((error) => Alert.alert("User", error instanceof Error ? error.message : "Unknown error"));
-  }, [load]);
+  }, [canModifyUsers, load]);
+
+  if (!canModifyUsers) {
+    return (
+      <Screen title="Users" subtitle="Modify access is required to open user details.">
+        <EmptyBlock label="Your Users access is read-only, so only the user list is available." />
+      </Screen>
+    );
+  }
 
   const toggleAccount = async () => {
     if (!user) return;
@@ -1118,22 +1218,312 @@ export function AssetDetailScreen({ route, navigation }: any) {
   );
 }
 
-export function UserAccessScreen() {
+export function ItTicketsScreen() {
   const { apiFetch } = useAuth();
+  const [tickets, setTickets] = useState<TicketRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [commentByTicket, setCommentByTicket] = useState<Record<string, string>>({});
+  const [commentAttachments, setCommentAttachments] = useState<Record<string, TicketAttachmentInput[]>>({});
+  const [form, setForm] = useState({
+    title: "",
+    category: "",
+    priority: "medium" as TicketRecord["priority"],
+    description: "",
+  });
+  const [formAttachments, setFormAttachments] = useState<TicketAttachmentInput[]>([]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await apiFetch("/api/it-tickets");
+      if (!response.ok) throw new Error((await response.text()) || "Failed to load tickets");
+      const json = await response.json();
+      setTickets(Array.isArray(json.items) ? json.items : []);
+    } catch (error) {
+      Alert.alert("IT Tickets", error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, [apiFetch]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const addFormImage = async (source: "library" | "camera") => {
+    const attachment = await pickTicketImage(source);
+    if (attachment) setFormAttachments((current) => [...current, attachment].slice(0, 5));
+  };
+
+  const addCommentImage = async (ticketId: string, source: "library" | "camera") => {
+    const attachment = await pickTicketImage(source);
+    if (attachment) {
+      setCommentAttachments((current) => ({
+        ...current,
+        [ticketId]: [...(current[ticketId] ?? []), attachment].slice(0, 5),
+      }));
+    }
+  };
+
+  const submit = async () => {
+    if (!form.title.trim() || !form.description.trim()) {
+      Alert.alert("IT Tickets", "Title and description are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await apiFetch("/api/it-tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, attachments: formAttachments }),
+      });
+      if (!response.ok) throw new Error((await response.text()) || "Failed to submit ticket");
+      setForm({ title: "", category: "", priority: "medium", description: "" });
+      setFormAttachments([]);
+      await load();
+    } catch (error) {
+      Alert.alert("IT Tickets", error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addComment = async (ticketId: string) => {
+    const body = commentByTicket[ticketId]?.trim();
+    const attachments = commentAttachments[ticketId] ?? [];
+    if (!body && !attachments.length) return;
+    setSaving(true);
+    try {
+      const response = await apiFetch(`/api/it-tickets/${encodeURIComponent(ticketId)}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body, attachments }),
+      });
+      if (!response.ok) throw new Error((await response.text()) || "Failed to add comment");
+      setCommentByTicket((current) => ({ ...current, [ticketId]: "" }));
+      setCommentAttachments((current) => ({ ...current, [ticketId]: [] }));
+      await load();
+    } catch (error) {
+      Alert.alert("IT Tickets", error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Screen title="IT Tickets" subtitle="Submit requests and follow replies from IT." right={<AppButton label={loading ? "Refreshing..." : "Refresh"} onPress={() => void load()} disabled={loading || saving} />}>
+      <Card>
+        <SectionTitle>Submit Ticket</SectionTitle>
+        <Field label="Title">
+          <AppInput value={form.title} onChangeText={(value) => setForm((current) => ({ ...current, title: value }))} />
+        </Field>
+        <Field label="Category">
+          <AppInput value={form.category} onChangeText={(value) => setForm((current) => ({ ...current, category: value }))} placeholder="Hardware, software, access..." />
+        </Field>
+        <Field label="Priority">
+          <Picker selectedValue={form.priority} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => ({ ...current, priority: value }))}>
+            {ticketPriorities.map((priority) => <Picker.Item key={priority} label={priority} value={priority} />)}
+          </Picker>
+        </Field>
+        <Field label="Description">
+          <AppInput value={form.description} onChangeText={(value) => setForm((current) => ({ ...current, description: value }))} multiline />
+        </Field>
+        <View style={styles.row}>
+          <AppButton label="File" onPress={() => void addFormImage("library")} style={{ flex: 1 }} />
+          <AppButton label="Camera" onPress={() => void addFormImage("camera")} style={{ flex: 1 }} />
+        </View>
+        <AttachmentStrip attachments={formAttachments} />
+        <AppButton label={saving ? "Saving..." : "Submit Ticket"} onPress={() => void submit()} variant="primary" disabled={saving} />
+      </Card>
+
+      {loading ? <LoadingBlock label="Loading tickets..." /> : null}
+      {tickets.map((ticket) => (
+        <Card key={ticket.id}>
+          <View style={styles.listItem}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.itemTitle}>{ticket.title}</Text>
+              <Text style={styles.metaText}>{ticket.category || "Uncategorized"} | {ticket.priority} | Updated {formatDate(ticket.updated_at)}</Text>
+            </View>
+            <Badge label={ticket.status} tone={ticketStatusTone(ticket.status)} />
+          </View>
+          <Text style={[styles.metaText, { marginTop: 10 }]}>{ticket.description}</Text>
+          <AttachmentStrip attachments={ticket.attachments} />
+          {(ticket.comments ?? []).map((comment) => (
+            <View key={comment.id} style={styles.ticketComment}>
+              <Text style={styles.metaText}>{comment.author_name || comment.author_upn} | {formatDate(comment.created_at)}</Text>
+              <Text style={styles.itemTitle}>{comment.body}</Text>
+              <AttachmentStrip attachments={comment.attachments} />
+            </View>
+          ))}
+          <Field label="Follow-up">
+            <AppInput value={commentByTicket[ticket.id] ?? ""} onChangeText={(value) => setCommentByTicket((current) => ({ ...current, [ticket.id]: value }))} placeholder="Add a comment" multiline />
+          </Field>
+          <View style={styles.row}>
+            <AppButton label="File" onPress={() => void addCommentImage(ticket.id, "library")} style={{ flex: 1 }} />
+            <AppButton label="Camera" onPress={() => void addCommentImage(ticket.id, "camera")} style={{ flex: 1 }} />
+            <AppButton label="Send" onPress={() => void addComment(ticket.id)} variant="primary" disabled={saving || (!commentByTicket[ticket.id]?.trim() && !commentAttachments[ticket.id]?.length)} style={{ flex: 1 }} />
+          </View>
+          <AttachmentStrip attachments={commentAttachments[ticket.id]} />
+        </Card>
+      ))}
+      {!tickets.length && !loading ? <EmptyBlock label="No tickets submitted yet." /> : null}
+    </Screen>
+  );
+}
+
+export function ItTicketsAdminScreen() {
+  const { apiFetch } = useAuth();
+  const [tickets, setTickets] = useState<TicketRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, {
+    status: TicketRecord["status"];
+    priority: TicketRecord["priority"];
+    assignedToUpn: string;
+    visibility: "public" | "internal";
+    comment: string;
+    attachments: TicketAttachmentInput[];
+  }>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await apiFetch("/api/it-tickets/admin");
+      if (!response.ok) throw new Error((await response.text()) || "Failed to load tickets");
+      const json = await response.json();
+      const items = Array.isArray(json.items) ? json.items as TicketRecord[] : [];
+      setTickets(items);
+      setDrafts((current) => {
+        const next = { ...current };
+        for (const ticket of items) {
+          next[ticket.id] ??= {
+            status: ticket.status,
+            priority: ticket.priority,
+            assignedToUpn: ticket.assigned_to_upn ?? "",
+            visibility: "public",
+            comment: "",
+            attachments: [],
+          };
+        }
+        return next;
+      });
+    } catch (error) {
+      Alert.alert("IT Tickets Admin", error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, [apiFetch]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const updateDraft = (ticketId: string, values: Partial<(typeof drafts)[string]>) => {
+    setDrafts((current) => ({ ...current, [ticketId]: { ...current[ticketId], ...values } }));
+  };
+
+  const addAdminImage = async (ticketId: string, source: "library" | "camera") => {
+    const attachment = await pickTicketImage(source);
+    if (attachment) {
+      const current = drafts[ticketId]?.attachments ?? [];
+      updateDraft(ticketId, { attachments: [...current, attachment].slice(0, 5) });
+    }
+  };
+
+  const save = async (ticket: TicketRecord) => {
+    const draft = drafts[ticket.id];
+    if (!draft) return;
+    setSavingId(ticket.id);
+    try {
+      const response = await apiFetch("/api/it-tickets/admin", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: ticket.id, ...draft }),
+      });
+      if (!response.ok) throw new Error((await response.text()) || "Failed to save ticket");
+      updateDraft(ticket.id, { comment: "", attachments: [] });
+      await load();
+    } catch (error) {
+      Alert.alert("IT Tickets Admin", error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <Screen title="IT Tickets Admin" subtitle="Review tickets, update status, and reply with attachments." right={<AppButton label={loading ? "Refreshing..." : "Refresh"} onPress={() => void load()} disabled={loading} />}>
+      {loading ? <LoadingBlock label="Loading tickets..." /> : null}
+      {tickets.map((ticket) => {
+        const draft = drafts[ticket.id] ?? {
+          status: ticket.status,
+          priority: ticket.priority,
+          assignedToUpn: ticket.assigned_to_upn ?? "",
+          visibility: "public" as const,
+          comment: "",
+          attachments: [],
+        };
+        return (
+          <Card key={ticket.id}>
+            <View style={styles.listItem}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemTitle}>{ticket.title}</Text>
+                <Text style={styles.metaText}>{ticket.requester_name || ticket.requester_upn} | {formatDate(ticket.created_at)}</Text>
+              </View>
+              <Badge label={ticket.status} tone={ticketStatusTone(ticket.status)} />
+            </View>
+            <Text style={[styles.metaText, { marginTop: 10 }]}>{ticket.description}</Text>
+            <AttachmentStrip attachments={ticket.attachments} />
+            <Field label="Status">
+              <Picker selectedValue={draft.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { status: value })}>
+                {ticketStatuses.map((status) => <Picker.Item key={status} label={status} value={status} />)}
+              </Picker>
+            </Field>
+            <Field label="Priority">
+              <Picker selectedValue={draft.priority} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { priority: value })}>
+                {ticketPriorities.map((priority) => <Picker.Item key={priority} label={priority} value={priority} />)}
+              </Picker>
+            </Field>
+            <Field label="Assigned To UPN">
+              <AppInput value={draft.assignedToUpn} onChangeText={(value) => updateDraft(ticket.id, { assignedToUpn: value })} />
+            </Field>
+            <Field label="Comment Visibility">
+              <Picker selectedValue={draft.visibility} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { visibility: value })}>
+                <Picker.Item label="public" value="public" />
+                <Picker.Item label="internal" value="internal" />
+              </Picker>
+            </Field>
+            <Field label="Follow-up Comment">
+              <AppInput value={draft.comment} onChangeText={(value) => updateDraft(ticket.id, { comment: value })} multiline />
+            </Field>
+            <View style={styles.row}>
+              <AppButton label="File" onPress={() => void addAdminImage(ticket.id, "library")} style={{ flex: 1 }} />
+              <AppButton label="Camera" onPress={() => void addAdminImage(ticket.id, "camera")} style={{ flex: 1 }} />
+              <AppButton label={savingId === ticket.id ? "Saving..." : "Save"} onPress={() => void save(ticket)} variant="primary" disabled={savingId === ticket.id} style={{ flex: 1 }} />
+            </View>
+            <AttachmentStrip attachments={draft.attachments} />
+            {(ticket.comments ?? []).map((comment) => (
+              <View key={comment.id} style={styles.ticketComment}>
+                <Text style={styles.metaText}>{comment.author_name || comment.author_upn} | {comment.visibility} | {formatDate(comment.created_at)}</Text>
+                <Text style={styles.itemTitle}>{comment.body}</Text>
+                <AttachmentStrip attachments={comment.attachments} />
+              </View>
+            ))}
+          </Card>
+        );
+      })}
+      {!tickets.length && !loading ? <EmptyBlock label="No tickets found." /> : null}
+    </Screen>
+  );
+}
+
+export function UserAccessScreen() {
+  const { apiFetch, reloadAccess, session } = useAuth();
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
-  const [access, setAccess] = useState<Record<AppModuleKey, boolean>>({
-    dashboard: false,
-    users: false,
-    bulk: false,
-    orgchart: false,
-    hr: false,
-    attendance: false,
-    assets: false,
-    "user-access": false,
-    settings: false,
-  });
+  const [access, setAccess] = useState<Record<AppModuleKey, boolean>>(getDefaultModuleAccess);
+  const [accessLevel, setAccessLevel] = useState<Record<AppModuleKey, ModuleAccessLevel>>(getDefaultModuleAccessLevels);
   const [assetGroupAccess, setAssetGroupAccess] = useState<string[]>([...assetGroups]);
 
   useEffect(() => {
@@ -1164,7 +1554,15 @@ export function UserAccessScreen() {
       return;
     }
     const json = await response.json();
-    setAccess(json.access ?? access);
+    const missingModules = getMissingModuleKeys(json.access);
+    if (missingModules.includes("it-tickets") || missingModules.includes("it-tickets-admin")) {
+      Alert.alert(
+        "User Access",
+        "The backend did not return the IT ticketing access keys. Deploy the updated web backend before enabling these modules from mobile.",
+      );
+    }
+    setAccess(normalizeModuleAccess(json.access));
+    setAccessLevel(normalizeModuleAccessLevels(json.accessLevel, json.access));
     setAssetGroupAccess(getAssetGroupsFromApi(json.assetGroups));
   };
 
@@ -1182,12 +1580,28 @@ export function UserAccessScreen() {
         userPrincipalName: selectedUser.userPrincipalName,
         displayName: selectedUser.displayName,
         access,
+        accessLevel,
         assetGroups: assetGroupAccess,
       }),
     });
     if (!response.ok) {
       Alert.alert("User Access", (await response.text()) || "Failed to save access");
       return;
+    }
+    const json = await response.json();
+    const missingModules = getMissingModuleKeys(json.access);
+    if (missingModules.includes("it-tickets") || missingModules.includes("it-tickets-admin")) {
+      Alert.alert(
+        "User Access",
+        "Access was saved by the backend, but the backend did not return the IT ticketing access keys. Deploy the updated web backend before enabling these modules from mobile.",
+      );
+      return;
+    }
+    setAccess(normalizeModuleAccess(json.access));
+    setAccessLevel(normalizeModuleAccessLevels(json.accessLevel, json.access));
+    setAssetGroupAccess(getAssetGroupsFromApi(json.assetGroups));
+    if (session?.upn.trim().toLowerCase() === selectedUser.userPrincipalName.trim().toLowerCase()) {
+      await reloadAccess();
     }
     Alert.alert("User Access", "User access saved");
   };
@@ -1218,21 +1632,22 @@ export function UserAccessScreen() {
       {selectedUser ? (
         <Card>
           <SectionTitle>{selectedUser.displayName || selectedUser.userPrincipalName}</SectionTitle>
-          {(Object.keys(access) as AppModuleKey[]).map((moduleKey) => (
-            <View key={moduleKey}>
+          {appModules.map((module) => (
+            <View key={module.key}>
               <View style={styles.rowBetween}>
-                <Text style={styles.itemTitle}>{moduleKey}</Text>
-                <Switch
-                  value={access[moduleKey]}
-                  onValueChange={(value) => {
-                    setAccess((current) => ({ ...current, [moduleKey]: value }));
-                    if (moduleKey === "assets") {
-                      setAssetGroupAccess(value ? [...assetGroups] : []);
+                <Text style={styles.itemTitle}>{module.label}</Text>
+                <AccessLevelPicker
+                  value={accessLevel[module.key]}
+                  onChange={(value) => {
+                    setAccessLevel((current) => ({ ...current, [module.key]: value }));
+                    setAccess((current) => ({ ...current, [module.key]: value !== "none" }));
+                    if (module.key === "assets") {
+                      setAssetGroupAccess(value !== "none" ? [...assetGroups] : []);
                     }
                   }}
                 />
               </View>
-              {moduleKey === "assets" && access.assets ? (
+              {module.key === "assets" && access.assets ? (
                 <View style={styles.accessGroupBox}>
                   <Text style={styles.metaText}>Asset groups</Text>
                   {assetGroups.map((group) => (
@@ -1366,10 +1781,20 @@ const styles = StyleSheet.create({
   metaText: { color: "rgba(255,255,255,0.66)", lineHeight: 20 },
   listItem: { flexDirection: "row", alignItems: "center", gap: 12 },
   accessGroupBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,0.14)", gap: 8, marginTop: 10, paddingTop: 10 },
+  accessLevelPicker: { flexDirection: "row", borderWidth: 1, borderColor: "rgba(255,255,255,0.16)", borderRadius: 8, overflow: "hidden" },
+  accessLevelOption: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.05)" },
+  accessLevelOptionActive: { backgroundColor: "rgba(14,3,219,0.45)" },
+  accessLevelText: { color: "rgba(255,255,255,0.68)", fontSize: 12, fontWeight: "600" },
+  accessLevelTextActive: { color: theme.colors.text },
   bigNumber: { color: theme.colors.text, fontSize: 34, fontWeight: "700", marginVertical: 8 },
   departmentRow: { gap: 10, marginTop: 12 },
   barTrack: { height: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 999, backgroundColor: "rgba(14,3,219,0.8)" },
   picker: { color: theme.colors.text, backgroundColor: theme.colors.glassStrong },
   userLookupRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,0.12)", paddingVertical: 10 },
+  attachmentGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingVertical: 8 },
+  attachmentItem: { width: 104, borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.14)", backgroundColor: theme.colors.glassStrong },
+  attachmentImage: { width: 104, height: 78 },
+  attachmentName: { color: "rgba(255,255,255,0.72)", fontSize: 11, paddingHorizontal: 6, paddingVertical: 5 },
+  ticketComment: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,0.12)", gap: 6, marginTop: 12, paddingTop: 12 },
 });

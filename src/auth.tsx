@@ -10,7 +10,14 @@ import {
   useState,
 } from "react";
 import { Alert } from "react-native";
-import { AppModuleKey } from "./types";
+import {
+  AppModuleKey,
+  ModuleAccessLevel,
+  getDefaultModuleAccess,
+  getDefaultModuleAccessLevels,
+  normalizeModuleAccess,
+  normalizeModuleAccessLevels,
+} from "./types";
 import { decodeJwtPayload } from "./utils";
 
 type StoredSession = {
@@ -26,7 +33,8 @@ type AuthContextValue = {
   accessLoading: boolean;
   accessError: string | null;
   session: StoredSession | null;
-  moduleAccess: Partial<Record<AppModuleKey, boolean>>;
+  moduleAccess: Record<AppModuleKey, boolean>;
+  moduleAccessLevel: Record<AppModuleKey, ModuleAccessLevel>;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
@@ -35,6 +43,7 @@ type AuthContextValue = {
 
 type AccessResponse = {
   access: Partial<Record<AppModuleKey, boolean>>;
+  accessLevel?: Partial<Record<AppModuleKey, ModuleAccessLevel>>;
 };
 
 const storageKey = "pitstop-mobile-session";
@@ -89,7 +98,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [session, setSession] = useState<StoredSession | null>(null);
-  const [moduleAccess, setModuleAccess] = useState<Partial<Record<AppModuleKey, boolean>>>({});
+  const [moduleAccess, setModuleAccess] = useState<Record<AppModuleKey, boolean>>(getDefaultModuleAccess);
+  const [moduleAccessLevel, setModuleAccessLevel] = useState<Record<AppModuleKey, ModuleAccessLevel>>(getDefaultModuleAccessLevels);
 
   useEffect(() => {
     WebBrowser.maybeCompleteAuthSession();
@@ -128,7 +138,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!session) {
       setAccessLoading(false);
       setAccessError(null);
-      setModuleAccess({});
+      setModuleAccess(getDefaultModuleAccess());
+      setModuleAccessLevel(getDefaultModuleAccessLevels());
       return;
     }
 
@@ -138,14 +149,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const response = await apiFetch("/api/access/me");
       if (!response.ok) {
         if (response.status === 403) {
-          setModuleAccess({});
+          setModuleAccess(getDefaultModuleAccess());
+          setModuleAccessLevel(getDefaultModuleAccessLevels());
           return;
         }
         throw new Error((await response.text()) || "Failed to load module access");
       }
 
       const json = (await response.json()) as AccessResponse;
-      setModuleAccess(json.access ?? {});
+      setModuleAccess(normalizeModuleAccess(json.access));
+      setModuleAccessLevel(normalizeModuleAccessLevels(json.accessLevel, json.access));
     } catch (error) {
       setAccessError(error instanceof Error ? error.message : "Unknown error");
       throw error;
@@ -158,7 +171,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!session) {
       setAccessLoading(false);
       setAccessError(null);
-      setModuleAccess({});
+      setModuleAccess(getDefaultModuleAccess());
+      setModuleAccessLevel(getDefaultModuleAccessLevels());
       return;
     }
 
@@ -224,7 +238,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setSession(null);
     setAccessLoading(false);
     setAccessError(null);
-    setModuleAccess({});
+    setModuleAccess(getDefaultModuleAccess());
+    setModuleAccessLevel(getDefaultModuleAccessLevels());
     await AsyncStorage.removeItem(storageKey);
   };
 
@@ -235,12 +250,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
       accessError,
       session,
       moduleAccess,
+      moduleAccessLevel,
       signIn,
       signOut,
       apiFetch,
       reloadAccess,
     }),
-    [accessError, accessLoading, initializing, moduleAccess, session],
+    [accessError, accessLoading, initializing, moduleAccess, moduleAccessLevel, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
