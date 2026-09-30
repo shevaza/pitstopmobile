@@ -104,3 +104,5 @@ After cloning from GitHub, verify all of the following before testing sign-in:
 ## Attendance service
 
 Attendance and cross-check continue to call the authenticated PitStop `/api/attendance` route. PitStop proxies requests to the internal service in `../itc-srv-10`; do not point the mobile backend URL at that internal service or embed API/Cloudflare/SQL secrets in the app. Settings now shows connection status and report names. Database access and SQL definitions are administered on the internal server. Rebuild the mobile app to distribute the updated settings screen.
+
+Cross-check now polls short-lived scraper jobs through PitStop until the original data response is ready. Deploy the updated internal API and rebuild this mobile client together. No additional mobile credentials or backend URL changes are required.

@@ -1,3 +1,4 @@
+import { fetchCrossCheck } from "./cross-check-client";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -1322,7 +1323,7 @@ export function CrossCheckScreen() {
   useEffect(() => {
     void (async () => {
       try {
-        const response = await apiFetch("/api/cross-check/leave-users");
+        const response = await fetchCrossCheck("/api/cross-check/leave-users", apiFetch);
         if (!response.ok) throw new Error((await response.text()) || "Failed to load leave users");
         const next = normalizeCrossCheckUsers(await response.json());
         setUsers(next);
@@ -1340,13 +1341,13 @@ export function CrossCheckScreen() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ year, employeeId });
-      const response = await apiFetch(`/api/cross-check/employee-leaves?${params.toString()}`);
+      const response = await fetchCrossCheck(`/api/cross-check/employee-leaves?${params.toString()}`, apiFetch);
       if (!response.ok) throw new Error((await response.text()) || "Failed to load employee leaves");
       const json = await response.json();
       setResult(json);
       const logs = responseTables(json).find((table) => comparable(table.title) === "logs")?.rows ?? [];
       const dates = Array.from(new Set(logs.map((row) => dateKey(rowValue(row, "Period"))).filter(Boolean)));
-      const pitstopResponse = await apiFetch("/api/cross-check/pitstop-data");
+      const pitstopResponse = await fetchCrossCheck("/api/cross-check/pitstop-data", apiFetch);
       if (!pitstopResponse.ok) throw new Error((await pitstopResponse.text()) || "Failed to load PitStop data");
       const pitstopRows = findResponseArray(await pitstopResponse.json()).filter((row): row is JsonRecord => Boolean(row) && typeof row === "object" && !Array.isArray(row));
       const selectedName = users.find((user) => user.value === employeeId)?.label.replace(/\|\s*Active\b/gi, "").trim().toLowerCase() ?? "";
