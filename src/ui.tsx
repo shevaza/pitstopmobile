@@ -116,6 +116,7 @@ export function AppInput({
   multiline,
   secureTextEntry,
   keyboardType,
+  editable,
   style,
 }: {
   value: string;
@@ -124,6 +125,7 @@ export function AppInput({
   multiline?: boolean;
   secureTextEntry?: boolean;
   keyboardType?: "default" | "numeric" | "email-address";
+  editable?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
@@ -135,6 +137,7 @@ export function AppInput({
       multiline={multiline}
       secureTextEntry={secureTextEntry}
       keyboardType={keyboardType}
+      editable={editable}
       style={[styles.input, multiline && styles.textarea, style]}
     />
   );

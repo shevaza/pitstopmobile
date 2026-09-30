@@ -128,7 +128,6 @@ export type AttendanceResponse = {
   columns: string[];
   fetchedAt: string;
   limit: number;
-  queryUsed?: string;
   source?: string;
   report?: { id: string; name: string };
   availableReports?: { id: string; name: string }[];
@@ -174,6 +173,7 @@ export type TicketRecord = {
   created_at: string;
   updated_at: string;
   closed_at?: string | null;
+  archived_at?: string | null;
   comments?: TicketComment[];
   attachments?: TicketAttachment[];
 };

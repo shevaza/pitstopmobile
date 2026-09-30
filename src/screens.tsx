@@ -823,7 +823,7 @@ export function AttendanceScreen() {
   }, [data, search]);
 
   return (
-    <Screen title="Attendance" subtitle="Live MSSQL report execution with report selection and filters.">
+    <Screen title="Attendance" subtitle="Live attendance reports with report selection and date filters.">
       <Card>
         <Field label="Report">
           <Picker selectedValue={reportId} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => { setReportId(value); void load(value); }}>
@@ -1218,6 +1218,211 @@ export function AssetDetailScreen({ route, navigation }: any) {
   );
 }
 
+type JsonRecord = Record<string, unknown>;
+type CrossCheckUser = { value: string; label: string };
+
+function findResponseArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  const record = value as JsonRecord;
+  for (const key of ["users", "data", "rows", "result", "items"]) {
+    if (Array.isArray(record[key])) return record[key] as unknown[];
+  }
+  return [];
+}
+
+function normalizeCrossCheckUsers(value: unknown): CrossCheckUser[] {
+  return findResponseArray(value).map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      const text = String(item ?? "");
+      return text ? { value: text, label: text } : null;
+    }
+    const row = item as JsonRecord;
+    const first = (keys: string[]) => keys.map((key) => row[key]).find((entry) => entry !== null && entry !== undefined && String(entry).trim());
+    const id = first(["employeeId", "EmployeeID", "id", "ID", "value", "userId", "UserID"]);
+    const label = first(["text", "Text", "label", "Label", "displayName", "name", "fullName", "employeeName", "EmployeeName"]);
+    return id ? { value: String(id), label: String(label ?? id) } : null;
+  }).filter((item): item is CrossCheckUser => Boolean(item));
+}
+
+function responseTables(value: unknown) {
+  const arrays: Array<{ title: string; rows: JsonRecord[] }> = [];
+  if (Array.isArray(value)) arrays.push({ title: "Results", rows: value.filter((row): row is JsonRecord => Boolean(row) && typeof row === "object" && !Array.isArray(row)) });
+  else if (value && typeof value === "object") {
+    Object.entries(value as JsonRecord).forEach(([key, rows]) => {
+      if (Array.isArray(rows) && rows.every((row) => Boolean(row) && typeof row === "object" && !Array.isArray(row))) {
+        arrays.push({ title: key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " "), rows: rows as JsonRecord[] });
+      }
+    });
+  }
+  return arrays.slice(0, 2);
+}
+
+function comparable(value: unknown) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function rowValue(row: JsonRecord, key: string) {
+  const target = comparable(key);
+  const match = Object.keys(row).find((candidate) => comparable(candidate) === target);
+  return match ? row[match] : undefined;
+}
+
+function dateKey(value: unknown) {
+  const text = String(value ?? "").trim();
+  const iso = text.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+  if (iso) return iso;
+  const slash = text.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (slash) return `${slash[3]}-${slash[2].padStart(2, "0")}-${slash[1].padStart(2, "0")}`;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+}
+
+function leaveLabel(row: JsonRecord) {
+  return Object.entries(row)
+    .filter(([key]) => /leave|vacation|absence|timeoff/.test(comparable(key)))
+    .map(([, value]) => String(value ?? "").trim())
+    .filter((value) => value && !/^(?:-|0|false|none|null|n\/a|no leave|working|present|available)$/i.test(value))
+    .join(" - ");
+}
+
+function buildDailyComparison(logs: JsonRecord[], punches: JsonRecord[]) {
+  const punchCounts = new Map<string, number>();
+  punches.forEach((row) => {
+    const likely = Object.keys(row).find((key) => /date|time/.test(comparable(key)));
+    const date = dateKey(row["Cross-check Date"] ?? (likely ? row[likely] : ""));
+    if (date) punchCounts.set(date, (punchCounts.get(date) ?? 0) + 1);
+  });
+  return logs.map((row) => {
+    const date = dateKey(rowValue(row, "Period"));
+    const leave = leaveLabel(row);
+    const punchesForDay = punchCounts.get(date) ?? 0;
+    const parsed = new Date(`${date}T00:00:00`);
+    const weekend = parsed.getDay() === 0 || parsed.getDay() === 6;
+    const result = leave && punchesForDay
+      ? "Abnormal: leave submitted but punches exist"
+      : !weekend && !leave && !punchesForDay
+        ? "Abnormal: no punches and no leave"
+        : weekend && !leave && !punchesForDay ? "Weekend" : leave ? "Leave - no punches" : "Attendance recorded";
+    return { Date: date, Day: parsed.toLocaleDateString("en-US", { weekday: "short" }), Leave: leave || "None", Punches: punchesForDay, Result: result };
+  }).filter((row) => row.Date).sort((a, b) => a.Date.localeCompare(b.Date));
+}
+
+export function CrossCheckScreen() {
+  const { apiFetch } = useAuth();
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [users, setUsers] = useState<CrossCheckUser[]>([]);
+  const [employeeId, setEmployeeId] = useState("");
+  const [result, setResult] = useState<unknown>(null);
+  const [comparison, setComparison] = useState<JsonRecord[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await apiFetch("/api/cross-check/leave-users");
+        if (!response.ok) throw new Error((await response.text()) || "Failed to load leave users");
+        const next = normalizeCrossCheckUsers(await response.json());
+        setUsers(next);
+        setEmployeeId((current) => current || next[0]?.value || "");
+      } catch (error) {
+        Alert.alert("Data Cross Check", error instanceof Error ? error.message : "Unknown error");
+      } finally {
+        setLoadingUsers(false);
+      }
+    })();
+  }, [apiFetch]);
+
+  const run = async () => {
+    if (!employeeId || !year) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ year, employeeId });
+      const response = await apiFetch(`/api/cross-check/employee-leaves?${params.toString()}`);
+      if (!response.ok) throw new Error((await response.text()) || "Failed to load employee leaves");
+      const json = await response.json();
+      setResult(json);
+      const logs = responseTables(json).find((table) => comparable(table.title) === "logs")?.rows ?? [];
+      const dates = Array.from(new Set(logs.map((row) => dateKey(rowValue(row, "Period"))).filter(Boolean)));
+      const pitstopResponse = await apiFetch("/api/cross-check/pitstop-data");
+      if (!pitstopResponse.ok) throw new Error((await pitstopResponse.text()) || "Failed to load PitStop data");
+      const pitstopRows = findResponseArray(await pitstopResponse.json()).filter((row): row is JsonRecord => Boolean(row) && typeof row === "object" && !Array.isArray(row));
+      const selectedName = users.find((user) => user.value === employeeId)?.label.replace(/\|\s*Active\b/gi, "").trim().toLowerCase() ?? "";
+      const person = pitstopRows.find((row) => {
+        const nameKey = Object.keys(row).find((key) => /fullname|name/.test(comparable(key)));
+        return nameKey && String(row[nameKey] ?? "").replace(/\|\s*Active\b/gi, "").trim().toLowerCase() === selectedName;
+      });
+      const badgeKey = person && Object.keys(person).find((key) => /badge|card|pin|employeeid|employeeno|empid|code/.test(comparable(key)));
+      const badge = badgeKey && person ? comparable(person[badgeKey]) : "";
+      if (!badge) throw new Error("No badge number found for the selected employee.");
+      // Keep cross-check requests within the internal API's SQL concurrency limit.
+      const attendance: Record<string, unknown>[][] = [];
+      for (const date of dates) {
+        const attendanceParams = new URLSearchParams({ fromDate: date, toDate: date, limit: "2000" });
+        const attendanceResponse = await apiFetch(`/api/attendance?${attendanceParams.toString()}`);
+        if (!attendanceResponse.ok) throw new Error((await attendanceResponse.text()) || "Failed to load attendance");
+        const attendanceJson = await attendanceResponse.json() as AttendanceResponse;
+        attendance.push(attendanceJson.rows.map((row) => ({ ...row, "Cross-check Date": date })));
+      }
+      const allPunches = attendance.flat();
+      const matchedPunches = allPunches.filter((row) => Object.entries(row).some(([key, value]) => /badge|card|pin|employeeid|employeeno|empid|code/.test(comparable(key)) && comparable(value) === badge));
+      setComparison(buildDailyComparison(logs, matchedPunches));
+    } catch (error) {
+      Alert.alert("Data Cross Check", error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const tables = useMemo(() => responseTables(result), [result]);
+  return (
+    <Screen title="Data Cross Check" subtitle="Compare employee leave data from the external leave service.">
+      <Card>
+        <Field label="Year"><AppInput value={year} onChangeText={setYear} keyboardType="numeric" /></Field>
+        <Field label="Employee">
+          <Picker selectedValue={employeeId} enabled={!loadingUsers && users.length > 0} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={setEmployeeId}>
+            {users.map((user) => <Picker.Item key={user.value} label={user.label} value={user.value} />)}
+          </Picker>
+        </Field>
+        <AppButton label={loading ? "Checking..." : "Submit"} onPress={() => void run()} variant="primary" disabled={loading || loadingUsers || !employeeId || !year} />
+      </Card>
+      {comparison.length ? (
+        <View>
+          <SectionTitle>Daily Comparison</SectionTitle>
+          {comparison.map((row, index) => (
+            <Card key={`${row.Date}-${index}`}>
+              {Object.entries(row).map(([key, value]) => (
+                <View key={key} style={styles.rowBetween}>
+                  <InlineLabel>{key}</InlineLabel>
+                  <Text style={[styles.metaText, { flex: 1, textAlign: "right", marginLeft: 12 }]}>{String(value)}</Text>
+                </View>
+              ))}
+            </Card>
+          ))}
+        </View>
+      ) : null}
+      {tables.map((table) => (
+        <View key={table.title}>
+          <SectionTitle>{table.title}</SectionTitle>
+          {table.rows.map((row, index) => (
+            <Card key={`${table.title}-${index}`}>
+              {Object.entries(row).map(([key, value]) => (
+                <View key={key} style={styles.rowBetween}>
+                  <InlineLabel>{key}</InlineLabel>
+                  <Text style={[styles.metaText, { flex: 1, textAlign: "right", marginLeft: 12 }]}>{displayValue(value === null || value === undefined ? null : String(value))}</Text>
+                </View>
+              ))}
+            </Card>
+          ))}
+        </View>
+      ))}
+      {!tables.length && !loading ? <EmptyBlock label="Submit the form to load cross-check results." /> : null}
+    </Screen>
+  );
+}
+
 export function ItTicketsScreen() {
   const { apiFetch } = useAuth();
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
@@ -1377,6 +1582,7 @@ export function ItTicketsAdminScreen() {
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"active" | "closed" | "all" | "archived">("active");
   const [drafts, setDrafts] = useState<Record<string, {
     status: TicketRecord["status"];
     priority: TicketRecord["priority"];
@@ -1451,10 +1657,48 @@ export function ItTicketsAdminScreen() {
     }
   };
 
+  const setArchived = async (ticket: TicketRecord, archived: boolean) => {
+    setSavingId(ticket.id);
+    try {
+      const response = await apiFetch("/api/it-tickets/admin", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: ticket.id,
+          status: ticket.status,
+          priority: ticket.priority,
+          assignedToUpn: ticket.assigned_to_upn,
+          archived,
+        }),
+      });
+      if (!response.ok) throw new Error((await response.text()) || "Failed to update ticket archive");
+      await load();
+    } catch (error) {
+      Alert.alert("IT Tickets Admin", error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const filteredTickets = useMemo(() => {
+    if (filter === "archived") return tickets.filter((ticket) => Boolean(ticket.archived_at));
+    const current = tickets.filter((ticket) => !ticket.archived_at);
+    if (filter === "all") return current;
+    if (filter === "closed") return current.filter((ticket) => ticket.status === "resolved" || ticket.status === "closed");
+    return current.filter((ticket) => ticket.status !== "resolved" && ticket.status !== "closed");
+  }, [filter, tickets]);
+
   return (
     <Screen title="IT Tickets Admin" subtitle="Review tickets, update status, and reply with attachments." right={<AppButton label={loading ? "Refreshing..." : "Refresh"} onPress={() => void load()} disabled={loading} />}>
+      <Card>
+        <View style={styles.row}>
+          {(["active", "closed", "all", "archived"] as const).map((option) => (
+            <AppButton key={option} label={option} onPress={() => setFilter(option)} variant={filter === option ? "primary" : "default"} style={{ flex: 1 }} />
+          ))}
+        </View>
+      </Card>
       {loading ? <LoadingBlock label="Loading tickets..." /> : null}
-      {tickets.map((ticket) => {
+      {filteredTickets.map((ticket) => {
         const draft = drafts[ticket.id] ?? {
           status: ticket.status,
           priority: ticket.priority,
@@ -1501,6 +1745,7 @@ export function ItTicketsAdminScreen() {
               <AppButton label="Camera" onPress={() => void addAdminImage(ticket.id, "camera")} style={{ flex: 1 }} />
               <AppButton label={savingId === ticket.id ? "Saving..." : "Save"} onPress={() => void save(ticket)} variant="primary" disabled={savingId === ticket.id} style={{ flex: 1 }} />
             </View>
+            <AppButton label={ticket.archived_at ? "Restore Ticket" : "Archive Ticket"} onPress={() => void setArchived(ticket, !ticket.archived_at)} disabled={savingId === ticket.id} style={{ marginTop: 10 }} />
             <AttachmentStrip attachments={draft.attachments} />
             {(ticket.comments ?? []).map((comment) => (
               <View key={comment.id} style={styles.ticketComment}>
@@ -1512,7 +1757,7 @@ export function ItTicketsAdminScreen() {
           </Card>
         );
       })}
-      {!tickets.length && !loading ? <EmptyBlock label="No tickets found." /> : null}
+      {!filteredTickets.length && !loading ? <EmptyBlock label="No tickets in this view." /> : null}
     </Screen>
   );
 }
@@ -1525,8 +1770,15 @@ export function UserAccessScreen() {
   const [access, setAccess] = useState<Record<AppModuleKey, boolean>>(getDefaultModuleAccess);
   const [accessLevel, setAccessLevel] = useState<Record<AppModuleKey, ModuleAccessLevel>>(getDefaultModuleAccessLevels);
   const [assetGroupAccess, setAssetGroupAccess] = useState<string[]>([...assetGroups]);
+  const [allEmployees, setAllEmployees] = useState(false);
+  const [bulkChanges, setBulkChanges] = useState<Partial<Record<AppModuleKey, ModuleAccessLevel>>>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (allEmployees) {
+      setUsers([]);
+      return;
+    }
     if (!search.trim()) {
       setUsers(selectedUser ? [selectedUser] : []);
       return;
@@ -1545,7 +1797,7 @@ export function UserAccessScreen() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [apiFetch, search, selectedUser]);
+  }, [allEmployees, apiFetch, search, selectedUser]);
 
   const loadAccess = async (user: UserRecord) => {
     const response = await apiFetch(`/api/user-access?userPrincipalName=${encodeURIComponent(user.userPrincipalName)}`);
@@ -1567,50 +1819,66 @@ export function UserAccessScreen() {
   };
 
   const save = async () => {
-    if (!selectedUser) return;
-    if (access.assets && assetGroupAccess.length === 0) {
+    if (!selectedUser && !allEmployees) return;
+    const bulkAssetsEnabled = allEmployees && bulkChanges.assets && bulkChanges.assets !== "none";
+    if ((allEmployees ? bulkAssetsEnabled : access.assets) && assetGroupAccess.length === 0) {
       Alert.alert("User Access", "Select at least one asset group.");
       return;
     }
-
+    setSaving(true);
     const response = await apiFetch("/api/user-access", {
-      method: "POST",
+      method: allEmployees ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userPrincipalName: selectedUser.userPrincipalName,
-        displayName: selectedUser.displayName,
-        access,
-        accessLevel,
-        assetGroups: assetGroupAccess,
-      }),
+      body: JSON.stringify(allEmployees
+        ? { changes: bulkChanges, assetGroups: assetGroupAccess }
+        : {
+          userPrincipalName: selectedUser!.userPrincipalName,
+          displayName: selectedUser!.displayName,
+          access,
+          accessLevel,
+          assetGroups: assetGroupAccess,
+        }),
     });
     if (!response.ok) {
       Alert.alert("User Access", (await response.text()) || "Failed to save access");
+      setSaving(false);
       return;
     }
     const json = await response.json();
+    if (allEmployees) {
+      setBulkChanges({});
+      setSaving(false);
+      Alert.alert("User Access", `Updated ${json.updatedModules ?? 0} modules for ${json.updatedUsers ?? 0} employees`);
+      return;
+    }
     const missingModules = getMissingModuleKeys(json.access);
     if (missingModules.includes("it-tickets") || missingModules.includes("it-tickets-admin")) {
       Alert.alert(
         "User Access",
         "Access was saved by the backend, but the backend did not return the IT ticketing access keys. Deploy the updated web backend before enabling these modules from mobile.",
       );
+      setSaving(false);
       return;
     }
     setAccess(normalizeModuleAccess(json.access));
     setAccessLevel(normalizeModuleAccessLevels(json.accessLevel, json.access));
     setAssetGroupAccess(getAssetGroupsFromApi(json.assetGroups));
-    if (session?.upn.trim().toLowerCase() === selectedUser.userPrincipalName.trim().toLowerCase()) {
+    if (session?.upn.trim().toLowerCase() === selectedUser!.userPrincipalName.trim().toLowerCase()) {
       await reloadAccess();
     }
+    setSaving(false);
     Alert.alert("User Access", "User access saved");
   };
 
   return (
     <Screen title="User Access" subtitle="Search a user and update the module matrix from mobile.">
       <Card>
+        <View style={styles.rowBetween}>
+          <Text style={styles.itemTitle}>Manage all employees</Text>
+          <Switch value={allEmployees} onValueChange={(value) => { setAllEmployees(value); setBulkChanges({}); }} />
+        </View>
         <Field label="Search users">
-          <AppInput value={search} onChangeText={setSearch} placeholder="Search by name or exact UPN" />
+          <AppInput value={search} onChangeText={setSearch} placeholder="Search by name or exact UPN" editable={!allEmployees} />
         </Field>
         {users.map((user) => (
           <Pressable
@@ -1629,14 +1897,40 @@ export function UserAccessScreen() {
         ))}
       </Card>
 
-      {selectedUser ? (
+      {selectedUser || allEmployees ? (
         <Card>
-          <SectionTitle>{selectedUser.displayName || selectedUser.userPrincipalName}</SectionTitle>
+          <SectionTitle>{allEmployees ? "All active employees" : selectedUser!.displayName || selectedUser!.userPrincipalName}</SectionTitle>
+          {!allEmployees ? (
+            <View style={styles.row}>
+              {(["read", "modify", "none"] as ModuleAccessLevel[]).map((level) => (
+                <AppButton key={level} label={level === "none" ? "Clear all" : `${level} all`} onPress={() => {
+                  setAccess(Object.fromEntries(appModules.map((module) => [module.key, level !== "none"])) as Record<AppModuleKey, boolean>);
+                  setAccessLevel(Object.fromEntries(appModules.map((module) => [module.key, level])) as Record<AppModuleKey, ModuleAccessLevel>);
+                  setAssetGroupAccess(level === "none" ? [] : [...assetGroups]);
+                }} style={{ flex: 1 }} />
+              ))}
+            </View>
+          ) : <Text style={styles.metaText}>Only selected modules change; all others keep their current access.</Text>}
           {appModules.map((module) => (
             <View key={module.key}>
               <View style={styles.rowBetween}>
                 <Text style={styles.itemTitle}>{module.label}</Text>
-                <AccessLevelPicker
+                {allEmployees ? (
+                  <Picker selectedValue={bulkChanges[module.key] ?? "unchanged"} style={[styles.picker, { width: 150 }]} dropdownIconColor={theme.colors.text} onValueChange={(value) => {
+                    setBulkChanges((current) => {
+                      const next = { ...current };
+                      if (value === "unchanged") delete next[module.key];
+                      else next[module.key] = value as ModuleAccessLevel;
+                      return next;
+                    });
+                    if (module.key === "assets" && value !== "none" && value !== "unchanged") setAssetGroupAccess([...assetGroups]);
+                  }}>
+                    <Picker.Item label="No change" value="unchanged" />
+                    <Picker.Item label="None" value="none" />
+                    <Picker.Item label="Read" value="read" />
+                    <Picker.Item label="Modify" value="modify" />
+                  </Picker>
+                ) : <AccessLevelPicker
                   value={accessLevel[module.key]}
                   onChange={(value) => {
                     setAccessLevel((current) => ({ ...current, [module.key]: value }));
@@ -1645,9 +1939,9 @@ export function UserAccessScreen() {
                       setAssetGroupAccess(value !== "none" ? [...assetGroups] : []);
                     }
                   }}
-                />
+                />}
               </View>
-              {module.key === "assets" && access.assets ? (
+              {module.key === "assets" && (allEmployees ? bulkChanges.assets && bulkChanges.assets !== "none" : access.assets) ? (
                 <View style={styles.accessGroupBox}>
                   <Text style={styles.metaText}>Asset groups</Text>
                   {assetGroups.map((group) => (
@@ -1668,10 +1962,10 @@ export function UserAccessScreen() {
               ) : null}
             </View>
           ))}
-          {access.assets && !assetGroupAccess.length ? (
+          {(allEmployees ? bulkChanges.assets && bulkChanges.assets !== "none" : access.assets) && !assetGroupAccess.length ? (
             <Text style={[styles.metaText, { marginTop: 8 }]}>Select at least one asset group.</Text>
           ) : null}
-          <AppButton label="Save Access" onPress={() => void save()} variant="primary" disabled={access.assets && !assetGroupAccess.length} style={{ marginTop: 12 }} />
+          <AppButton label={saving ? "Saving..." : allEmployees ? "Apply to all employees" : "Save Access"} onPress={() => void save()} variant="primary" disabled={saving || (allEmployees && !Object.keys(bulkChanges).length) || Boolean((allEmployees ? bulkChanges.assets && bulkChanges.assets !== "none" : access.assets) && !assetGroupAccess.length)} style={{ marginTop: 12 }} />
         </Card>
       ) : null}
     </Screen>
@@ -1680,92 +1974,37 @@ export function UserAccessScreen() {
 
 export function SettingsScreen() {
   const { apiFetch } = useAuth();
-  const [state, setState] = useState({
-    server: "",
-    database: "",
-    user: "",
-    password: "",
-    encrypt: true,
-    trustServerCertificate: true,
-    reports: [{ id: "attendance-default", name: "Attendance", query: "" }],
-  });
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const response = await apiFetch("/api/settings/mssql");
-        if (!response.ok) throw new Error((await response.text()) || "Failed to load settings");
-        const json = await response.json();
-        setState({
-          server: json.settings?.server ?? "",
-          database: json.settings?.database ?? "",
-          user: json.settings?.user ?? "",
-          password: "",
-          encrypt: json.settings?.encrypt ?? true,
-          trustServerCertificate: json.settings?.trustServerCertificate ?? true,
-          reports:
-            json.settings?.reports?.length
-              ? json.settings.reports
-              : [{ id: "attendance-default", name: "Attendance", query: json.defaultQuery ?? "" }],
-        });
-      } catch (error) {
-        Alert.alert("Settings", error instanceof Error ? error.message : "Unknown error");
-      }
-    };
-
-    void load();
+  const [settings, setSettings] = useState<{ connected: boolean; reports: { id: string; name: string }[] } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiFetch("/api/settings/mssql");
+      if (!response.ok) throw new Error((await response.text()) || "Could not check attendance connection.");
+      setSettings((await response.json()).settings);
+    } catch (error) {
+      setSettings(null);
+      setError(error instanceof Error ? error.message : "Could not check attendance connection.");
+    } finally { setLoading(false); }
   }, [apiFetch]);
-
-  const save = async () => {
-    const response = await apiFetch("/api/settings/mssql", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state),
-    });
-    if (!response.ok) {
-      Alert.alert("Settings", (await response.text()) || "Failed to save settings");
-      return;
-    }
-    Alert.alert("Settings", "MSSQL settings saved");
-  };
+  useEffect(() => { void load(); }, [load]);
 
   return (
-    <Screen title="Settings" subtitle="Configure the MSSQL connection and attendance report query set.">
+    <Screen title="Settings" subtitle="Attendance connection and available reports.">
       <Card>
-        <Field label="Server">
-          <AppInput value={state.server} onChangeText={(value) => setState((current) => ({ ...current, server: value }))} />
-        </Field>
-        <Field label="Database">
-          <AppInput value={state.database} onChangeText={(value) => setState((current) => ({ ...current, database: value }))} />
-        </Field>
-        <Field label="User">
-          <AppInput value={state.user} onChangeText={(value) => setState((current) => ({ ...current, user: value }))} />
-        </Field>
-        <Field label="Password">
-          <AppInput value={state.password} onChangeText={(value) => setState((current) => ({ ...current, password: value }))} secureTextEntry />
-        </Field>
-        <View style={styles.rowBetween}>
-          <Text style={styles.itemTitle}>Encrypt</Text>
-          <Switch value={state.encrypt} onValueChange={(value) => setState((current) => ({ ...current, encrypt: value }))} />
-        </View>
-        <View style={styles.rowBetween}>
-          <Text style={styles.itemTitle}>Trust Server Certificate</Text>
-          <Switch value={state.trustServerCertificate} onValueChange={(value) => setState((current) => ({ ...current, trustServerCertificate: value }))} />
-        </View>
+        <SectionTitle>Attendance service</SectionTitle>
+        <Text style={styles.itemTitle}>{loading ? "Checking connection..." : settings?.connected ? "Connected" : "Not connected"}</Text>
+        {error ? <Text accessibilityRole="alert" style={styles.metaText}>{error}</Text> : null}
+        <Text style={styles.metaText}>IT manages database access and report definitions on the internal attendance server. Contact IT to request changes.</Text>
+        <AppButton label={loading ? "Checking..." : "Check connection"} onPress={() => void load()} disabled={loading} variant="primary" />
       </Card>
-
-      {state.reports.map((report, index) => (
-        <Card key={report.id}>
-          <Field label="Report name">
-            <AppInput value={report.name} onChangeText={(value) => setState((current) => ({ ...current, reports: current.reports.map((entry, entryIndex) => entryIndex === index ? { ...entry, name: value } : entry) }))} />
-          </Field>
-          <Field label="Report query">
-            <AppInput value={report.query} onChangeText={(value) => setState((current) => ({ ...current, reports: current.reports.map((entry, entryIndex) => entryIndex === index ? { ...entry, query: value } : entry) }))} multiline />
-          </Field>
-        </Card>
-      ))}
-
-      <AppButton label="Save Settings" onPress={() => void save()} variant="primary" />
+      <Card>
+        <SectionTitle>Available reports</SectionTitle>
+        {settings?.reports.map((report) => <Text key={report.id} style={styles.itemTitle}>{report.name}</Text>)}
+        {!settings?.reports.length ? <Text style={styles.metaText}>Connect to the attendance service to load reports.</Text> : null}
+      </Card>
     </Screen>
   );
 }

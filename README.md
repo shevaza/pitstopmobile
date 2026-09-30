@@ -100,3 +100,7 @@ After cloning from GitHub, verify all of the following before testing sign-in:
 - If sign-in opens but never returns to the app, re-check the `pitstopmobile://auth` redirect URI registration.
 - If API requests fail on a phone, verify `EXPO_PUBLIC_API_BASE_URL` uses your computer's LAN IP and that both devices are on the same network.
 - If sign-in works but access is empty, verify the backend Supabase and Azure access configuration in [`../README.md`](C:\Users\shafiq.zabet\Desktop\code\pitstop2.0\README.md).
+
+## Attendance service
+
+Attendance and cross-check continue to call the authenticated PitStop `/api/attendance` route. PitStop proxies requests to the internal service in `../itc-srv-10`; do not point the mobile backend URL at that internal service or embed API/Cloudflare/SQL secrets in the app. Settings now shows connection status and report names. Database access and SQL definitions are administered on the internal server. Rebuild the mobile app to distribute the updated settings screen.
