@@ -5,8 +5,7 @@
     "version": "0.1.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -18,7 +17,6 @@
       "bundleIdentifier": "com.pitstop.mobile"
     },
     "android": {
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.pitstop.mobile",
       "adaptiveIcon": {
@@ -27,6 +25,12 @@
       }
     },
     "scheme": "pitstopmobile",
+    "plugins": [
+      "expo-sharing",
+      "expo-web-browser",
+      "expo-status-bar",
+      "@react-native-community/datetimepicker"
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },

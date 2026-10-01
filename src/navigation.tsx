@@ -1,9 +1,9 @@
 import "react-native-gesture-handler";
 import { NavigationContainer } from "@react-navigation/native";
-import { createDrawerNavigator } from "@react-navigation/drawer";
+import { createDrawerNavigator, DrawerContentScrollView } from "@react-navigation/drawer";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { ComponentType } from "react";
-import { Image, Text, View } from "react-native";
+import { Image, Switch, Text, View } from "react-native";
 import { useAuth } from "./auth";
 import {
   AssetDetailScreen,
@@ -23,7 +23,8 @@ import {
   UserDetailScreen,
   UsersScreen,
 } from "./screens";
-import { navigationTheme, theme } from "./theme";
+import { useTheme } from "./ThemeProvider";
+import { getNavigationTheme } from "./theme";
 import { AppModuleKey } from "./types";
 
 const Drawer = createDrawerNavigator();
@@ -58,23 +59,27 @@ function getInitials(value?: string) {
 }
 
 function CenterMessage({ title, detail }: { title: string; detail?: string }) {
+  const { theme } = useTheme();
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
       <Text style={{ color: theme.colors.text, fontSize: 20, fontWeight: "700", textAlign: "center" }}>{title}</Text>
       {detail ? (
-        <Text style={{ color: "rgba(255,255,255,0.72)", marginTop: 12, textAlign: "center" }}>{detail}</Text>
+        <Text style={{ color: theme.colors.muted, marginTop: 12, textAlign: "center" }}>{detail}</Text>
       ) : null}
     </View>
   );
 }
 
 function NoAccessScreen() {
+  const { theme } = useTheme();
+
   const { signOut } = useAuth();
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
       <Text style={{ color: theme.colors.text, fontSize: 20, fontWeight: "700", textAlign: "center" }}>No modules available</Text>
-      <Text style={{ color: "rgba(255,255,255,0.72)", marginTop: 12, textAlign: "center" }}>
+      <Text style={{ color: theme.colors.muted, marginTop: 12, textAlign: "center" }}>
         Your account signed in successfully, but no mobile modules are enabled for it.
       </Text>
       <Text style={{ color: theme.colors.text, marginTop: 24, fontSize: 16 }} onPress={() => void signOut()}>
@@ -85,15 +90,17 @@ function NoAccessScreen() {
 }
 
 function AccessErrorScreen({ message }: { message: string }) {
+  const { theme } = useTheme();
+
   const { reloadAccess, signOut } = useAuth();
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
       <Text style={{ color: theme.colors.text, fontSize: 20, fontWeight: "700", textAlign: "center" }}>Cannot reach the backend</Text>
-      <Text style={{ color: "rgba(255,255,255,0.72)", marginTop: 12, textAlign: "center" }}>
+      <Text style={{ color: theme.colors.muted, marginTop: 12, textAlign: "center" }}>
         The mobile app signed in, but the API request for module access failed.
       </Text>
-      <Text style={{ color: "rgba(255,255,255,0.72)", marginTop: 12, textAlign: "center" }}>{message}</Text>
+      <Text style={{ color: theme.colors.muted, marginTop: 12, textAlign: "center" }}>{message}</Text>
       <Text style={{ color: theme.colors.text, marginTop: 24, fontSize: 16 }} onPress={() => void reloadAccess()}>
         Retry
       </Text>
@@ -105,6 +112,8 @@ function AccessErrorScreen({ message }: { message: string }) {
 }
 
 function DrawerNavigator() {
+  const { theme, setMode } = useTheme();
+
   const { moduleAccess, session, signOut } = useAuth();
   const enabledScreens = screenRegistry.filter((screen) => moduleAccess[screen.key]);
   const displayName = session?.name || session?.upn;
@@ -120,20 +129,24 @@ function DrawerNavigator() {
   return (
     <Drawer.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: "#18203A" },
+        headerStyle: { backgroundColor: theme.colors.header },
         headerTintColor: theme.colors.text,
-        drawerStyle: { backgroundColor: "#11182D" },
+        drawerStyle: { backgroundColor: theme.colors.drawer },
         drawerActiveTintColor: theme.colors.text,
-        drawerInactiveTintColor: "rgba(255,255,255,0.78)",
+        drawerInactiveTintColor: theme.colors.muted,
       }}
       drawerContent={(props) => (
-        <View style={{ flex: 1, backgroundColor: "#11182D", paddingTop: 52, paddingHorizontal: 20, gap: 18 }}>
+        <DrawerContentScrollView
+          style={{ backgroundColor: theme.colors.drawer }}
+          contentContainerStyle={{ flexGrow: 1, paddingStart: 20, paddingEnd: 20, gap: 18 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={{ color: theme.colors.text, fontSize: 22, fontWeight: "700" }}>PitStop 2.0</Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             {photoSource ? (
               <Image
                 source={photoSource}
-                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.08)" }}
+                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.colors.glass }}
               />
             ) : (
               <View
@@ -143,9 +156,9 @@ function DrawerNavigator() {
                   borderRadius: 22,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: "#243152",
+                  backgroundColor: theme.colors.avatar,
                   borderWidth: 1,
-                  borderColor: "rgba(255,255,255,0.18)",
+                  borderColor: theme.colors.border,
                 }}
               >
                 <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: "700" }}>{getInitials(displayName)}</Text>
@@ -154,29 +167,33 @@ function DrawerNavigator() {
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: "600" }}>{displayName}</Text>
               {session?.email && session.email !== displayName ? (
-                <Text style={{ color: "rgba(255,255,255,0.7)", marginTop: 2 }}>{session.email}</Text>
+                <Text style={{ color: theme.colors.muted, marginTop: 2 }}>{session.email}</Text>
               ) : null}
             </View>
           </View>
-          <View style={{ borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.18)" }} />
+          <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.border }} />
           {props.state.routeNames.map((routeName, index) => {
             const focused = props.state.index === index;
             return (
               <Text
                 key={routeName}
-                style={{ color: focused ? theme.colors.text : "rgba(255,255,255,0.78)", fontSize: 16, paddingVertical: 6 }}
+                style={{ color: focused ? theme.colors.text : theme.colors.muted, fontSize: 16, paddingVertical: 6 }}
                 onPress={() => props.navigation.navigate(routeName)}
               >
                 {routeName}
               </Text>
             );
           })}
-          <View style={{ marginTop: "auto", paddingVertical: 19, marginBottom: 24, backgroundColor: theme.colors.danger }}>
+          <View style={{ marginTop: "auto", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <Text style={{ color: theme.colors.text, fontSize: 16 }}>Light theme</Text>
+            <Switch accessibilityLabel="Light theme" value={theme.mode === "light"} onValueChange={(enabled) => setMode(enabled ? "light" : "dark")} />
+          </View>
+          <View style={{ paddingVertical: 19, marginBottom: 24, backgroundColor: theme.colors.danger }}>
             <Text style={{ color: theme.colors.text, fontSize: 16, textAlign: "center" }} onPress={() => void signOut()}>
               Sign Out
             </Text>
           </View>
-        </View>
+        </DrawerContentScrollView>
       )}
     >
       {enabledScreens.map((screen) => (
@@ -187,6 +204,8 @@ function DrawerNavigator() {
 }
 
 export function AppNavigator() {
+  const { theme } = useTheme();
+
   const { initializing, accessLoading, accessError, moduleAccess, session } = useAuth();
   const enabledScreens = screenRegistry.filter((screen) => moduleAccess[screen.key]);
 
@@ -195,7 +214,7 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme as any}>
+    <NavigationContainer theme={getNavigationTheme(theme)}>
       {!session ? (
         <LoginScreen />
       ) : accessLoading ? (
@@ -207,7 +226,7 @@ export function AppNavigator() {
       ) : (
         <Stack.Navigator
           screenOptions={{
-            headerStyle: { backgroundColor: "#18203A" },
+            headerStyle: { backgroundColor: theme.colors.header },
             headerTintColor: theme.colors.text,
             contentStyle: { backgroundColor: theme.colors.background },
           }}

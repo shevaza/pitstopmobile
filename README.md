@@ -4,8 +4,8 @@ This folder contains the Expo client for PitStop 2.0. The mobile app depends on 
 
 ## Prerequisites
 
-- Node.js 20 or later
-- Expo Go on your phone, or an Android/iOS simulator
+- Node.js 22.13 or later (Node.js 24 LTS recommended)
+- An Android device/emulator or an iOS device/simulator; rebuild the native app after SDK upgrades
 - A running PitStop backend from the repository root
 - Azure AD app registration access for mobile sign-in
 
@@ -77,6 +77,28 @@ npm run android
 npm run ios
 npm run web
 ```
+
+## Expo SDK 56
+
+This app uses Expo SDK 56. Install the locked dependencies with `npm ci` and check them with `npx expo-doctor`.
+
+SDK upgrades require a new native build; an existing SDK 54 APK or development client cannot run this bundle. On Windows with Android Studio installed:
+
+```bash
+cd mobile
+npm ci
+npm run android
+```
+
+For a distributable Android APK using the existing EAS preview profile:
+
+```bash
+npx eas-cli build --platform android --profile preview
+```
+
+Native `android/` and `ios/` folders are generated from `app.json` and ignored by Git. Use `npx expo prebuild --platform android` to regenerate Android when app configuration changes (this replaces the generated folder). Keep lasting native changes in Expo config plugins. SDK 56 requires iOS 16.4+ and Xcode 26.4+ for local iOS builds on macOS; EAS can build iOS from Windows.
+
+For Metro, run `npx expo start --clear`. Use a matching SDK 56 Expo Go build for basic previews; use an installed native build to test the `pitstopmobile://auth` sign-in callback. Verify sign-in, drawer navigation, file import/export, image picking, and attendance cross-check on a device before distributing the new build.
 
 ## First-run checklist
 

@@ -14,7 +14,8 @@ import {
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { theme } from "./theme";
+import { useTheme } from "./ThemeProvider";
+import { darkTheme, lightTheme, type AppTheme } from "./theme";
 
 export function Screen({
   title,
@@ -30,6 +31,9 @@ export function Screen({
   includeTopInset?: boolean;
   right?: ReactNode;
 }>) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const content = (
     <>
       <View style={styles.headerRow}>
@@ -45,7 +49,7 @@ export function Screen({
 
   return (
     <LinearGradient
-      colors={["#121933", "#1A2547", "#10182F"]}
+      colors={theme.gradient}
       start={{ x: 0.1, y: 0.1 }}
       end={{ x: 0.9, y: 0.9 }}
       style={{ flex: 1 }}
@@ -65,14 +69,20 @@ export function Card({
   children,
   style,
 }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return (
-    <BlurView intensity={24} tint="dark" style={[styles.card, style]}>
+    <BlurView intensity={24} tint={theme.mode} style={[styles.card, style]}>
       {children}
     </BlurView>
   );
 }
 
 export function SectionTitle({ children }: PropsWithChildren) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
@@ -89,6 +99,9 @@ export function AppButton({
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const tone =
     variant === "primary"
       ? styles.buttonPrimary
@@ -128,12 +141,16 @@ export function AppInput({
   editable?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return (
     <TextInput
       value={value}
       onChangeText={onChangeText}
       placeholder={placeholder}
-      placeholderTextColor="rgba(255,255,255,0.45)"
+      placeholderTextColor={theme.colors.placeholder}
+      keyboardAppearance={theme.mode}
       multiline={multiline}
       secureTextEntry={secureTextEntry}
       keyboardType={keyboardType}
@@ -147,6 +164,9 @@ export function Field({
   label,
   children,
 }: PropsWithChildren<{ label: string }>) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -162,6 +182,9 @@ export function Badge({
   label: string;
   tone?: "default" | "success" | "danger" | "warning" | "info";
 }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const style =
     tone === "success"
       ? styles.badgeSuccess
@@ -181,6 +204,9 @@ export function Badge({
 }
 
 export function LoadingBlock({ label = "Loading..." }: { label?: string }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return (
     <Card>
       <View style={styles.centered}>
@@ -192,6 +218,9 @@ export function LoadingBlock({ label = "Loading..." }: { label?: string }) {
 }
 
 export function EmptyBlock({ label }: { label: string }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return (
     <Card>
       <Text style={styles.mutedText}>{label}</Text>
@@ -203,15 +232,18 @@ export function InlineLabel({
   children,
   style,
 }: PropsWithChildren<{ style?: StyleProp<TextStyle> }>) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return <Text style={[styles.inlineLabel, style]}>{children}</Text>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   safeArea: { flex: 1 },
   scrollContent: { padding: theme.spacing.md, gap: theme.spacing.md },
   headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: "700" },
-  subtitle: { color: "rgba(255,255,255,0.7)", marginTop: 6, lineHeight: 20 },
+  subtitle: { color: theme.colors.muted, marginTop: 6, lineHeight: 20 },
   card: {
     borderRadius: theme.radius.lg,
     borderWidth: 1,
@@ -231,7 +263,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   buttonDefault: { backgroundColor: theme.colors.glass, borderColor: theme.colors.border },
-  buttonPrimary: { backgroundColor: "rgba(14,3,219,0.28)", borderColor: theme.colors.border },
+  buttonPrimary: { backgroundColor: theme.colors.primarySurface, borderColor: theme.colors.border },
   buttonDanger: { backgroundColor: theme.colors.danger, borderColor: "rgba(255,99,132,0.35)" },
   buttonSuccess: { backgroundColor: theme.colors.success, borderColor: "rgba(52,211,153,0.35)" },
   buttonDisabled: { opacity: 0.5 },
@@ -247,15 +279,17 @@ const styles = StyleSheet.create({
   },
   textarea: { minHeight: 110, textAlignVertical: "top" },
   field: { gap: 8 },
-  fieldLabel: { color: "rgba(255,255,255,0.68)", fontSize: 12, textTransform: "uppercase" },
+  fieldLabel: { color: theme.colors.muted, fontSize: 12, textTransform: "uppercase" },
   badge: { borderRadius: theme.radius.pill, paddingHorizontal: 10, paddingVertical: 6, alignSelf: "flex-start" },
   badgeLabel: { color: theme.colors.text, fontSize: 12, fontWeight: "600" },
-  badgeDefault: { backgroundColor: "rgba(255,255,255,0.12)" },
+  badgeDefault: { backgroundColor: theme.colors.glass },
   badgeSuccess: { backgroundColor: theme.colors.success },
   badgeDanger: { backgroundColor: theme.colors.danger },
   badgeWarning: { backgroundColor: theme.colors.warning },
   badgeInfo: { backgroundColor: theme.colors.info },
   centered: { flexDirection: "row", alignItems: "center", gap: 10 },
-  mutedText: { color: "rgba(255,255,255,0.68)", lineHeight: 20 },
-  inlineLabel: { color: "rgba(255,255,255,0.62)" },
+  mutedText: { color: theme.colors.muted, lineHeight: 20 },
+  inlineLabel: { color: theme.colors.muted },
 });
+
+const themedStyles = { dark: createStyles(darkTheme), light: createStyles(lightTheme) };

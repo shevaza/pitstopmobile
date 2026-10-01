@@ -1,6 +1,14 @@
-export const theme = {
+export const darkTheme = {
+  mode: "dark" as "dark" | "light",
+  gradient: ["#121933", "#1A2547", "#10182F"] as [string, string, string],
   colors: {
     primary: "#0E03DB",
+    primarySurface: "rgba(14,3,219,0.28)",
+    placeholder: "rgba(255,255,255,0.45)",
+    surface: "#141B30",
+    header: "#18203A",
+    drawer: "#11182D",
+    avatar: "#243152",
     background: "#0C1020",
     foreground: "#E8EBFF",
     text: "#FFFFFF",
@@ -38,20 +46,51 @@ export const theme = {
   },
 };
 
-export const navigationTheme = {
-  dark: true,
+export type AppTheme = typeof darkTheme;
+
+export const lightTheme: AppTheme = {
+  ...darkTheme,
+  mode: "light",
+  gradient: ["#F4F6FF", "#EAF0FF", "#F8FAFF"],
   colors: {
-    primary: theme.colors.primary,
-    background: theme.colors.background,
-    card: "#141B30",
-    text: theme.colors.text,
-    border: "rgba(255,255,255,0.18)",
-    notification: theme.colors.primary,
+    ...darkTheme.colors,
+    background: "#F4F6FF",
+    foreground: "#18223D",
+    text: "#18223D",
+    muted: "#526079",
+    placeholder: "#64748B",
+    glass: "rgba(255,255,255,0.88)",
+    glassStrong: "#FFFFFF",
+    border: "#CAD3E3",
+    surface: "#FFFFFF",
+    header: "#FFFFFF",
+    drawer: "#F8FAFF",
+    avatar: "#E0E7FF",
+    primarySurface: "#E0E3FF",
+    danger: "#FFE4E8",
+    success: "#DCFCE7",
+    warning: "#FEF3C7",
+    info: "#DBEAFE",
   },
-  fonts: {
-    regular: { fontFamily: "System", fontWeight: "400" as const },
-    medium: { fontFamily: "System", fontWeight: "500" as const },
-    bold: { fontFamily: "System", fontWeight: "700" as const },
-    heavy: { fontFamily: "System", fontWeight: "800" as const },
-  },
+  shadow: { card: { ...darkTheme.shadow.card, shadowOpacity: 0.08, elevation: 3 } },
 };
+
+export function getNavigationTheme(theme: AppTheme) {
+  return {
+    dark: theme.mode === "dark",
+    colors: {
+      primary: theme.colors.primary,
+      background: theme.colors.background,
+      card: theme.colors.surface,
+      text: theme.colors.text,
+      border: theme.colors.border,
+      notification: theme.colors.primary,
+    },
+    fonts: {
+      regular: { fontFamily: "System", fontWeight: "400" as const },
+      medium: { fontFamily: "System", fontWeight: "500" as const },
+      bold: { fontFamily: "System", fontWeight: "700" as const },
+      heavy: { fontFamily: "System", fontWeight: "800" as const },
+    },
+  };
+}

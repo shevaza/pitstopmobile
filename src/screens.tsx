@@ -5,11 +5,13 @@ import * as ImagePicker from "expo-image-picker";
 import * as Sharing from "expo-sharing";
 import Papa from "papaparse";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import { Picker } from "@react-native-picker/picker";
+import { Alert, Image, Platform, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { AppDateInput } from "./AppDateInput";
+import { AppSelect } from "./AppSelect";
 import { useAuth } from "./auth";
 import { assetGroups, getAssetGroupsFromApi } from "./assetGroups";
-import { theme } from "./theme";
+import { useTheme } from "./ThemeProvider";
+import { darkTheme, lightTheme, type AppTheme } from "./theme";
 import { AppModuleKey, AssetFormState, AssetRecord, AttendanceResponse, Metrics, ModuleAccessLevel, TicketAttachment, TicketAttachmentInput, TicketRecord, UserRecord, UsersSyncResult, appModules, getDefaultModuleAccess, getDefaultModuleAccessLevels, getMissingModuleKeys, normalizeModuleAccess, normalizeModuleAccessLevels } from "./types";
 import { csvEscape, displayValue, formatDate, normalizeText } from "./utils";
 import {
@@ -32,6 +34,9 @@ export type RootStackParamList = {
 };
 
 function MessageCard({ label, tone }: { label: string; tone: "danger" | "success" }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return (
     <Card>
       <Badge label={tone === "danger" ? "Error" : "Success"} tone={tone} />
@@ -41,6 +46,9 @@ function MessageCard({ label, tone }: { label: string; tone: "danger" | "success
 }
 
 function StatCard({ title, value }: { title: string; value: number }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   return (
     <Card style={{ flex: 1, minWidth: 140 }}>
       <Text style={styles.metaText}>{title}</Text>
@@ -76,11 +84,22 @@ function ticketStatusTone(status: TicketRecord["status"]) {
 }
 
 function AccessLevelPicker({ value, onChange }: { value: ModuleAccessLevel; onChange: (value: ModuleAccessLevel) => void }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const options: Array<{ value: ModuleAccessLevel; label: string }> = [
     { value: "none", label: "None" },
     { value: "read", label: "Read" },
     { value: "modify", label: "Modify" },
   ];
+
+  if (Platform.OS === "ios") {
+    return (
+      <AppSelect accessibilityLabel="Access level" selectedValue={value} onValueChange={onChange} style={{ width: 150 }}>
+        {options.map((option) => <AppSelect.Item key={option.value} label={option.label} value={option.value} />)}
+      </AppSelect>
+    );
+  }
 
   return (
     <View style={styles.accessLevelPicker}>
@@ -126,6 +145,9 @@ async function pickTicketImage(source: "library" | "camera"): Promise<TicketAtta
 }
 
 function AttachmentStrip({ attachments }: { attachments?: Array<TicketAttachment | TicketAttachmentInput> }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   if (!attachments?.length) return null;
   return (
     <View style={styles.attachmentGrid}>
@@ -145,6 +167,9 @@ function AttachmentStrip({ attachments }: { attachments?: Array<TicketAttachment
 }
 
 export function LoginScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { signIn } = useAuth();
 
   return (
@@ -161,6 +186,9 @@ export function LoginScreen() {
 }
 
 export function DashboardScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [data, setData] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -245,6 +273,9 @@ export function DashboardScreen() {
 }
 
 export function UsersScreen({ navigation }: any) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch, moduleAccessLevel } = useAuth();
   const [items, setItems] = useState<UserRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -358,11 +389,11 @@ export function UsersScreen({ navigation }: any) {
         </View>
         <View style={{ paddingVertical: 6 }}>
         <Field label="Status">
-          <Picker selectedValue={statusFilter} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setStatusFilter(value)}>
-            <Picker.Item label="All" value="all" />
-            <Picker.Item label="Enabled" value="enabled" />
-            <Picker.Item label="Disabled" value="disabled" />
-          </Picker>
+          <AppSelect accessibilityLabel="Status" selectedValue={statusFilter} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setStatusFilter(value)}>
+            <AppSelect.Item label="All" value="all" />
+            <AppSelect.Item label="Enabled" value="enabled" />
+            <AppSelect.Item label="Disabled" value="disabled" />
+          </AppSelect>
         </Field>
         </View>
       </Card>
@@ -397,6 +428,9 @@ export function UsersScreen({ navigation }: any) {
 }
 
 export function UserDetailScreen({ route }: any) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch, moduleAccessLevel } = useAuth();
   const [user, setUser] = useState<UserRecord | null>(null);
   const [manager, setManager] = useState<{ userPrincipalName?: string; displayName?: string } | null>(null);
@@ -519,6 +553,9 @@ export function UserDetailScreen({ route }: any) {
 }
 
 export function BulkScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [preflight, setPreflight] = useState<any | null>(null);
@@ -722,6 +759,9 @@ export function OrgChartScreen() {
 }
 
 function OrgNode({ node, depth }: { node: any; depth: number }) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const [open, setOpen] = useState(depth < 1);
   return (
     <View style={{ marginLeft: depth * 12 }}>
@@ -745,6 +785,9 @@ function OrgNode({ node, depth }: { node: any; depth: number }) {
 }
 
 export function HrScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const leaveBalances = [
     ["Annual Leave", 14, "success"],
     ["Sick Leave", 6, "warning"],
@@ -784,6 +827,9 @@ export function HrScreen() {
 }
 
 export function AttendanceScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [data, setData] = useState<AttendanceResponse | null>(null);
   const [search, setSearch] = useState("");
@@ -827,17 +873,17 @@ export function AttendanceScreen() {
     <Screen title="Attendance" subtitle="Live attendance reports with report selection and date filters.">
       <Card>
         <Field label="Report">
-          <Picker selectedValue={reportId} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => { setReportId(value); void load(value); }}>
+          <AppSelect accessibilityLabel="Report" selectedValue={reportId} enabled={!!data?.availableReports?.length} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={setReportId}>
             {(data?.availableReports ?? []).map((report) => (
-              <Picker.Item key={report.id} label={report.name} value={report.id} />
+              <AppSelect.Item key={report.id} label={report.name} value={report.id} />
             ))}
-          </Picker>
+          </AppSelect>
         </Field>
         <Field label="From date">
-          <AppInput value={fromDate} onChangeText={setFromDate} placeholder="YYYY-MM-DD" />
+          <AppDateInput label="From date" value={fromDate} onChange={setFromDate} />
         </Field>
         <Field label="To date">
-          <AppInput value={toDate} onChangeText={setToDate} placeholder="YYYY-MM-DD" />
+          <AppDateInput label="To date" value={toDate} onChange={setToDate} />
         </Field>
         <Field label="Limit">
           <AppInput value={limit} onChangeText={setLimit} keyboardType="numeric" />
@@ -867,6 +913,9 @@ export function AttendanceScreen() {
 }
 
 export function AssetsScreen({ navigation }: any) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [assets, setAssets] = useState<AssetRecord[]>([]);
   const [allowedAssetGroups, setAllowedAssetGroups] = useState<string[]>([...assetGroups]);
@@ -980,21 +1029,21 @@ export function AssetsScreen({ navigation }: any) {
             <AppInput value={form.name} onChangeText={(value) => setForm((current) => ({ ...current, name: value }))} />
           </Field>
           <Field label="Group">
-            <Picker selectedValue={form.assetGroup} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => ({ ...current, assetGroup: value }))}>
+            <AppSelect accessibilityLabel="Group" selectedValue={form.assetGroup} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => ({ ...current, assetGroup: value }))}>
               {allowedAssetGroups.map((group) => (
-                <Picker.Item key={group} label={group} value={group} />
+                <AppSelect.Item key={group} label={group} value={group} />
               ))}
-            </Picker>
+            </AppSelect>
           </Field>
           <Field label="Type">
             <AppInput value={form.assetType} onChangeText={(value) => setForm((current) => ({ ...current, assetType: value }))} />
           </Field>
           <Field label="Status">
-            <Picker selectedValue={form.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => ({ ...current, status: value }))}>
+            <AppSelect accessibilityLabel="Status" selectedValue={form.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => ({ ...current, status: value }))}>
               {["active", "in-stock", "repair", "retired"].map((status) => (
-                <Picker.Item key={status} label={status} value={status} />
+                <AppSelect.Item key={status} label={status} value={status} />
               ))}
-            </Picker>
+            </AppSelect>
           </Field>
           <Field label="Qty">
             <AppInput value={form.quantity} onChangeText={(value) => setForm((current) => ({ ...current, quantity: value }))} keyboardType="numeric" />
@@ -1054,6 +1103,9 @@ export function AssetsScreen({ navigation }: any) {
 }
 
 export function AssetDetailScreen({ route, navigation }: any) {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [asset, setAsset] = useState<AssetRecord | null>(null);
   const [form, setForm] = useState<AssetFormState | null>(null);
@@ -1177,21 +1229,21 @@ export function AssetDetailScreen({ route, navigation }: any) {
 
       <Card>
         <Field label="Group">
-          <Picker selectedValue={form.assetGroup} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => current ? { ...current, assetGroup: value } : current)}>
+          <AppSelect accessibilityLabel="Group" selectedValue={form.assetGroup} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => current ? { ...current, assetGroup: value } : current)}>
             {allowedAssetGroups.map((group) => (
-              <Picker.Item key={group} label={group} value={group} />
+              <AppSelect.Item key={group} label={group} value={group} />
             ))}
-          </Picker>
+          </AppSelect>
         </Field>
       </Card>
 
       <Card>
         <Field label="Status">
-          <Picker selectedValue={form.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => current ? { ...current, status: value } : current)}>
+          <AppSelect accessibilityLabel="Status" selectedValue={form.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => current ? { ...current, status: value } : current)}>
             {["active", "in-stock", "repair", "retired"].map((status) => (
-              <Picker.Item key={status} label={status} value={status} />
+              <AppSelect.Item key={status} label={status} value={status} />
             ))}
-          </Picker>
+          </AppSelect>
         </Field>
       </Card>
 
@@ -1311,6 +1363,9 @@ function buildDailyComparison(logs: JsonRecord[], punches: JsonRecord[]) {
 }
 
 export function CrossCheckScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [users, setUsers] = useState<CrossCheckUser[]>([]);
@@ -1383,9 +1438,9 @@ export function CrossCheckScreen() {
       <Card>
         <Field label="Year"><AppInput value={year} onChangeText={setYear} keyboardType="numeric" /></Field>
         <Field label="Employee">
-          <Picker selectedValue={employeeId} enabled={!loadingUsers && users.length > 0} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={setEmployeeId}>
-            {users.map((user) => <Picker.Item key={user.value} label={user.label} value={user.value} />)}
-          </Picker>
+          <AppSelect accessibilityLabel="Employee" selectedValue={employeeId} enabled={!loadingUsers && users.length > 0} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={setEmployeeId}>
+            {users.map((user) => <AppSelect.Item key={user.value} label={user.label} value={user.value} />)}
+          </AppSelect>
         </Field>
         <AppButton label={loading ? "Checking..." : "Submit"} onPress={() => void run()} variant="primary" disabled={loading || loadingUsers || !employeeId || !year} />
       </Card>
@@ -1425,6 +1480,9 @@ export function CrossCheckScreen() {
 }
 
 export function ItTicketsScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1528,9 +1586,9 @@ export function ItTicketsScreen() {
           <AppInput value={form.category} onChangeText={(value) => setForm((current) => ({ ...current, category: value }))} placeholder="Hardware, software, access..." />
         </Field>
         <Field label="Priority">
-          <Picker selectedValue={form.priority} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => ({ ...current, priority: value }))}>
-            {ticketPriorities.map((priority) => <Picker.Item key={priority} label={priority} value={priority} />)}
-          </Picker>
+          <AppSelect accessibilityLabel="Priority" selectedValue={form.priority} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => setForm((current) => ({ ...current, priority: value }))}>
+            {ticketPriorities.map((priority) => <AppSelect.Item key={priority} label={priority} value={priority} />)}
+          </AppSelect>
         </Field>
         <Field label="Description">
           <AppInput value={form.description} onChangeText={(value) => setForm((current) => ({ ...current, description: value }))} multiline />
@@ -1579,6 +1637,9 @@ export function ItTicketsScreen() {
 }
 
 export function ItTicketsAdminScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1720,23 +1781,23 @@ export function ItTicketsAdminScreen() {
             <Text style={[styles.metaText, { marginTop: 10 }]}>{ticket.description}</Text>
             <AttachmentStrip attachments={ticket.attachments} />
             <Field label="Status">
-              <Picker selectedValue={draft.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { status: value })}>
-                {ticketStatuses.map((status) => <Picker.Item key={status} label={status} value={status} />)}
-              </Picker>
+              <AppSelect accessibilityLabel="Status" selectedValue={draft.status} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { status: value })}>
+                {ticketStatuses.map((status) => <AppSelect.Item key={status} label={status} value={status} />)}
+              </AppSelect>
             </Field>
             <Field label="Priority">
-              <Picker selectedValue={draft.priority} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { priority: value })}>
-                {ticketPriorities.map((priority) => <Picker.Item key={priority} label={priority} value={priority} />)}
-              </Picker>
+              <AppSelect accessibilityLabel="Priority" selectedValue={draft.priority} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { priority: value })}>
+                {ticketPriorities.map((priority) => <AppSelect.Item key={priority} label={priority} value={priority} />)}
+              </AppSelect>
             </Field>
             <Field label="Assigned To UPN">
               <AppInput value={draft.assignedToUpn} onChangeText={(value) => updateDraft(ticket.id, { assignedToUpn: value })} />
             </Field>
             <Field label="Comment Visibility">
-              <Picker selectedValue={draft.visibility} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { visibility: value })}>
-                <Picker.Item label="public" value="public" />
-                <Picker.Item label="internal" value="internal" />
-              </Picker>
+              <AppSelect accessibilityLabel="Comment Visibility" selectedValue={draft.visibility} style={styles.picker} dropdownIconColor={theme.colors.text} onValueChange={(value) => updateDraft(ticket.id, { visibility: value })}>
+                <AppSelect.Item label="public" value="public" />
+                <AppSelect.Item label="internal" value="internal" />
+              </AppSelect>
             </Field>
             <Field label="Follow-up Comment">
               <AppInput value={draft.comment} onChangeText={(value) => updateDraft(ticket.id, { comment: value })} multiline />
@@ -1764,6 +1825,9 @@ export function ItTicketsAdminScreen() {
 }
 
 export function UserAccessScreen() {
+  const { theme } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch, reloadAccess, session } = useAuth();
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -1917,7 +1981,7 @@ export function UserAccessScreen() {
               <View style={styles.rowBetween}>
                 <Text style={styles.itemTitle}>{module.label}</Text>
                 {allEmployees ? (
-                  <Picker selectedValue={bulkChanges[module.key] ?? "unchanged"} style={[styles.picker, { width: 150 }]} dropdownIconColor={theme.colors.text} onValueChange={(value) => {
+                  <AppSelect accessibilityLabel={`${module.label} access`} selectedValue={bulkChanges[module.key] ?? "unchanged"} style={[styles.picker, { width: 150 }]} dropdownIconColor={theme.colors.text} onValueChange={(value) => {
                     setBulkChanges((current) => {
                       const next = { ...current };
                       if (value === "unchanged") delete next[module.key];
@@ -1926,11 +1990,11 @@ export function UserAccessScreen() {
                     });
                     if (module.key === "assets" && value !== "none" && value !== "unchanged") setAssetGroupAccess([...assetGroups]);
                   }}>
-                    <Picker.Item label="No change" value="unchanged" />
-                    <Picker.Item label="None" value="none" />
-                    <Picker.Item label="Read" value="read" />
-                    <Picker.Item label="Modify" value="modify" />
-                  </Picker>
+                    <AppSelect.Item label="No change" value="unchanged" />
+                    <AppSelect.Item label="None" value="none" />
+                    <AppSelect.Item label="Read" value="read" />
+                    <AppSelect.Item label="Modify" value="modify" />
+                  </AppSelect>
                 ) : <AccessLevelPicker
                   value={accessLevel[module.key]}
                   onChange={(value) => {
@@ -1974,6 +2038,9 @@ export function UserAccessScreen() {
 }
 
 export function SettingsScreen() {
+  const { theme, setMode } = useTheme();
+  const styles = themedStyles[theme.mode];
+
   const { apiFetch } = useAuth();
   const [settings, setSettings] = useState<{ connected: boolean; reports: { id: string; name: string }[] } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1993,7 +2060,15 @@ export function SettingsScreen() {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <Screen title="Settings" subtitle="Attendance connection and available reports.">
+    <Screen title="Settings" subtitle="Appearance, attendance connection and available reports.">
+      <Card>
+        <SectionTitle>Appearance</SectionTitle>
+        <View style={styles.rowBetween}>
+          <Text style={styles.itemTitle}>Light theme</Text>
+          <Switch accessibilityLabel="Light theme" value={theme.mode === "light"} onValueChange={(enabled) => setMode(enabled ? "light" : "dark")} />
+        </View>
+        <Text style={styles.metaText}>Your preference is saved on this device.</Text>
+      </Card>
       <Card>
         <SectionTitle>Attendance service</SectionTitle>
         <Text style={styles.itemTitle}>{loading ? "Checking connection..." : settings?.connected ? "Connected" : "Not connected"}</Text>
@@ -2010,31 +2085,33 @@ export function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   loginLogo: { maxWidth: 300, height: 160, alignSelf: "center", marginBottom: 6 },
-  heroText: { color: "rgba(255,255,255,0.78)", lineHeight: 22 },
+  heroText: { color: theme.colors.muted, lineHeight: 22 },
   titleText: { color: theme.colors.text, fontSize: 30, fontWeight: "700", marginBottom: 6 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   row: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 6 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   itemTitle: { color: theme.colors.text, fontSize: 16, fontWeight: "600" },
-  metaText: { color: "rgba(255,255,255,0.66)", lineHeight: 20 },
+  metaText: { color: theme.colors.muted, lineHeight: 20 },
   listItem: { flexDirection: "row", alignItems: "center", gap: 12 },
-  accessGroupBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,0.14)", gap: 8, marginTop: 10, paddingTop: 10 },
-  accessLevelPicker: { flexDirection: "row", borderWidth: 1, borderColor: "rgba(255,255,255,0.16)", borderRadius: 8, overflow: "hidden" },
-  accessLevelOption: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.05)" },
-  accessLevelOptionActive: { backgroundColor: "rgba(14,3,219,0.45)" },
-  accessLevelText: { color: "rgba(255,255,255,0.68)", fontSize: 12, fontWeight: "600" },
+  accessGroupBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border, gap: 8, marginTop: 10, paddingTop: 10 },
+  accessLevelPicker: { flexDirection: "row", borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, overflow: "hidden" },
+  accessLevelOption: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: theme.colors.glass },
+  accessLevelOptionActive: { backgroundColor: theme.colors.primarySurface },
+  accessLevelText: { color: theme.colors.muted, fontSize: 12, fontWeight: "600" },
   accessLevelTextActive: { color: theme.colors.text },
   bigNumber: { color: theme.colors.text, fontSize: 34, fontWeight: "700", marginVertical: 8 },
   departmentRow: { gap: 10, marginTop: 12 },
-  barTrack: { height: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
+  barTrack: { height: 8, borderRadius: 999, backgroundColor: theme.colors.glass, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 999, backgroundColor: "rgba(14,3,219,0.8)" },
   picker: { color: theme.colors.text, backgroundColor: theme.colors.glassStrong },
-  userLookupRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,0.12)", paddingVertical: 10 },
+  userLookupRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border, paddingVertical: 10 },
   attachmentGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingVertical: 8 },
-  attachmentItem: { width: 104, borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.14)", backgroundColor: theme.colors.glassStrong },
+  attachmentItem: { width: 104, borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.glassStrong },
   attachmentImage: { width: 104, height: 78 },
-  attachmentName: { color: "rgba(255,255,255,0.72)", fontSize: 11, paddingHorizontal: 6, paddingVertical: 5 },
-  ticketComment: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,0.12)", gap: 6, marginTop: 12, paddingTop: 12 },
+  attachmentName: { color: theme.colors.muted, fontSize: 11, paddingHorizontal: 6, paddingVertical: 5 },
+  ticketComment: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border, gap: 6, marginTop: 12, paddingTop: 12 },
 });
+
+const themedStyles = { dark: createStyles(darkTheme), light: createStyles(lightTheme) };
