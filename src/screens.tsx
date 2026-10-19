@@ -2104,7 +2104,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   bigNumber: { color: theme.colors.text, fontSize: 34, fontWeight: "700", marginVertical: 8 },
   departmentRow: { gap: 10, marginTop: 12 },
   barTrack: { height: 8, borderRadius: 999, backgroundColor: theme.colors.glass, overflow: "hidden" },
-  barFill: { height: "100%", borderRadius: 999, backgroundColor: "rgba(14,3,219,0.8)" },
+  barFill: { height: "100%", borderRadius: 999, backgroundColor: "rgba(18,102,241,0.8)" },
   picker: { color: theme.colors.text, backgroundColor: theme.colors.glassStrong },
   userLookupRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border, paddingVertical: 10 },
   attachmentGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingVertical: 8 },

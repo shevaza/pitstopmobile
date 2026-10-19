@@ -113,11 +113,11 @@ export function AppButton({
 
   return (
     <Pressable
-      style={[styles.button, tone, disabled && styles.buttonDisabled, style]}
+      style={({ pressed }) => [styles.button, tone, pressed && { opacity: 0.75 }, disabled && styles.buttonDisabled, style]}
       disabled={disabled}
       onPress={onPress}
     >
-      <Text style={styles.buttonLabel}>{label}</Text>
+      <Text style={[styles.buttonLabel, variant === "primary" && { color: "#FFFFFF" }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -248,6 +248,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    borderTopWidth: 3,
+    borderTopColor: theme.colors.primary,
     backgroundColor: theme.colors.glass,
     padding: theme.spacing.md,
     overflow: "hidden",
@@ -263,9 +265,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderWidth: 1,
   },
   buttonDefault: { backgroundColor: theme.colors.glass, borderColor: theme.colors.border },
-  buttonPrimary: { backgroundColor: theme.colors.primarySurface, borderColor: theme.colors.border },
-  buttonDanger: { backgroundColor: theme.colors.danger, borderColor: "rgba(255,99,132,0.35)" },
-  buttonSuccess: { backgroundColor: theme.colors.success, borderColor: "rgba(52,211,153,0.35)" },
+  buttonPrimary: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  buttonDanger: { backgroundColor: theme.colors.danger, borderColor: theme.colors.danger },
+  buttonSuccess: { backgroundColor: theme.colors.success, borderColor: theme.colors.success },
   buttonDisabled: { opacity: 0.5 },
   buttonLabel: { color: theme.colors.text, fontWeight: "600" },
   input: {

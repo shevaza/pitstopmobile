@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#03030A"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "icon": "./assets/icon.png",
@@ -21,7 +21,7 @@
       "package": "com.pitstop.mobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#03030A"
+        "backgroundColor": "#000000"
       }
     },
     "scheme": "pitstopmobile",
