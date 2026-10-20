@@ -507,7 +507,7 @@ export function UserDetailScreen({ route }: any) {
 
   if (!user) {
     return (
-      <Screen title="User" subtitle="Loading user details...">
+      <Screen title="User">
         <LoadingBlock />
       </Screen>
     );
@@ -1195,7 +1195,7 @@ export function AssetDetailScreen({ route, navigation }: any) {
 
   if (!asset || !form) {
     return (
-      <Screen title="Asset" subtitle="Loading asset details...">
+      <Screen title="Asset">
         <LoadingBlock />
       </Screen>
     );
@@ -2006,6 +2006,7 @@ export function UserAccessScreen() {
                   }}
                 />}
               </View>
+              {module.key === "policies" && <Text style={styles.metaText}>Read: view and acknowledge. Modify: publish, edit, and review acknowledgements.</Text>}
               {module.key === "assets" && (allEmployees ? bulkChanges.assets && bulkChanges.assets !== "none" : access.assets) ? (
                 <View style={styles.accessGroupBox}>
                   <Text style={styles.metaText}>Asset groups</Text>

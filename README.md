@@ -128,3 +128,9 @@ After cloning from GitHub, verify all of the following before testing sign-in:
 Attendance and cross-check continue to call the authenticated PitStop `/api/attendance` route. PitStop proxies requests to the internal service in `../itc-srv-10`; do not point the mobile backend URL at that internal service or embed API/Cloudflare/SQL secrets in the app. Settings now shows connection status and report names. Database access and SQL definitions are administered on the internal server. Rebuild the mobile app to distribute the updated settings screen.
 
 Cross-check now polls short-lived scraper jobs through PitStop until the original data response is ready. Deploy the updated internal API and rebuild this mobile client together. No additional mobile credentials or backend URL changes are required.
+
+## Policy portal
+
+The Policies drawer screen supports publishing/editing, reading, version-specific acknowledgement, and acknowledgement history. In User Access, set Policies to Read for employees or Modify for HR/publishers. None disables the feature.
+
+Deploy the backend policy API and run `supabase/policies_module.sql` from the web repository against its configured Supabase database first. Rebuild this Expo app after updating. Pending-policy alerts appear in the drawer header across all screens, refresh every minute while active, and refresh when the app resumes. Notifications are in-app; email and background device push are not configured.

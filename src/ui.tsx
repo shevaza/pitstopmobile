@@ -1,4 +1,4 @@
-import { PropsWithChildren, type ReactNode } from "react";
+import { PropsWithChildren, type ReactNode, type Ref } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -24,12 +24,14 @@ export function Screen({
   includeTopInset = false,
   children,
   right,
+  scrollRef,
 }: PropsWithChildren<{
   title: string;
   subtitle?: string;
   scroll?: boolean;
   includeTopInset?: boolean;
   right?: ReactNode;
+  scrollRef?: Ref<ScrollView>;
 }>) {
   const { theme } = useTheme();
   const styles = themedStyles[theme.mode];
@@ -56,7 +58,7 @@ export function Screen({
     >
       <SafeAreaView style={styles.safeArea} edges={includeTopInset ? ["top", "left", "right", "bottom"] : ["left", "right", "bottom"]}>
         {scroll ? (
-          <ScrollView contentContainerStyle={styles.scrollContent}>{content}</ScrollView>
+          <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent}>{content}</ScrollView>
         ) : (
           <View style={styles.scrollContent}>{content}</View>
         )}
@@ -203,17 +205,19 @@ export function Badge({
   );
 }
 
-export function LoadingBlock({ label = "Loading..." }: { label?: string }) {
+export function LoadingBlock({ label = "Loading" }: { label?: string }) {
   const { theme } = useTheme();
-  const styles = themedStyles[theme.mode];
-
   return (
-    <Card>
-      <View style={styles.centered}>
-        <ActivityIndicator color={theme.colors.text} />
-        <Text style={styles.mutedText}>{label}</Text>
+    <View accessible accessibilityRole="progressbar" accessibilityLabel={label} accessibilityState={{ busy: true }}
+      style={{ minHeight: 180, alignItems: "center", justifyContent: "center", gap: 24 }}>
+      <View style={{ width: 72, height: 72, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.glass, borderWidth: 1, borderColor: theme.colors.border }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
-    </Card>
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ alignItems: "center", gap: 8 }}>
+        <View style={{ width: 160, height: 6, borderRadius: 3, backgroundColor: theme.colors.primarySurface }} />
+        <View style={{ width: 96, height: 6, borderRadius: 3, backgroundColor: theme.colors.primarySurface }} />
+      </View>
+    </View>
   );
 }
 
