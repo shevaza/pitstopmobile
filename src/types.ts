@@ -65,6 +65,7 @@ export type UserRecord = {
   mobilePhone?: string;
   employeeId?: string;
   employeeType?: string;
+  role?: string;
   usageLocation?: string;
   accountEnabled?: boolean;
 };

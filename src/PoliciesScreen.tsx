@@ -1,3 +1,4 @@
+import { EMPLOYEE_TYPES } from "./employee-types";
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ScrollView, Switch, Text, View } from "react-native";
@@ -6,6 +7,8 @@ import { useTheme } from "./ThemeProvider";
 import { AppButton, AppInput, Badge, Card, Field, LoadingBlock, Screen, SectionTitle } from "./ui";
 import { usePolicyNotifications } from "./PolicyNotifications";
 import type { Policy, PolicyAcknowledgement, PolicyList, PolicyAudience } from "./policy-types";
+
+import { pickPolicyAttachment, downloadPolicyAttachment } from "./policy-attachments";
 
 import { createPolicyEditor, policyEditorError, policyPublication, type PolicyEditor } from "./policy-editor";
 
@@ -18,6 +21,7 @@ export function PoliciesScreen() {
     const [data, setData] = useState<PolicyList | null>(null);
     const [selected, setSelected] = useState<Policy | null>(null);
     const [editor, setEditor] = useState<PolicyEditor | null>(null);
+    const [existingAttachment, setExistingAttachment] = useState<string | null>(null);
     const [audience, setAudience] = useState<PolicyAudience | null>(null);
     const [recipientSearch, setRecipientSearch] = useState("");
     const [report, setReport] = useState<PolicyAcknowledgement[] | null>(null);
@@ -47,6 +51,7 @@ export function PoliciesScreen() {
         setAudience(await res.json());
         setRecipientSearch("");
         setEditor(createPolicyEditor(policy));
+        setExistingAttachment(policy?.attachment_name ?? null);
         setSelected(null); setReport(null);
         scrollRef.current?.scrollTo({ y: 0, animated: true });
     }
@@ -81,10 +86,25 @@ export function PoliciesScreen() {
                 <Field label="Version"><AppInput value={editor.version} onChangeText={(version) => setEditor({ ...editor, version })} keyboardType="numeric" editable={!busy} /></Field>
                 {editor.expectedVersion !== undefined && <Text style={text}>Current version: {editor.expectedVersion}. Enter a higher whole-number version.</Text>}
                 <SectionTitle>Send to</SectionTitle>
-                <Text style={text}>{!editor.target_departments.length && !editor.target_users.length ? "Everyone" : `${editor.target_departments.length} departments, ${editor.target_users.length} selected users`}</Text>
-                <Text style={text}>Choose departments, users, or both. No selections sends to everyone. Department recipients are captured from Microsoft 365 when you publish.</Text>
-                <AppButton label="Send to everyone (clear selections)" disabled={busy} onPress={() => setEditor({ ...editor, target_departments: [], target_users: [] })} />
+                <Text style={text}>{!editor.target_departments.length && !editor.target_users.length && !editor.target_employee_types.length && !editor.target_roles.length ? "Everyone" : `${editor.target_departments.length} departments, ${editor.target_users.length} selected users, ${editor.target_employee_types.length} employee types, ${editor.target_roles.length} roles`}</Text>
+                <Text style={text}>Choose departments, users, or both. No audience filters sends to everyone. Department recipients are captured from Microsoft 365 when you publish.</Text>
+                <AppButton label="Send to everyone (clear selections)" disabled={busy} onPress={() => setEditor({ ...editor, target_roles: [], target_employee_types: [], target_departments: [], target_users: [] })} />
                 <Field label="Search departments and users"><AppInput value={recipientSearch} onChangeText={setRecipientSearch} placeholder="Name, email or department" editable={!busy} /></Field>
+                <SectionTitle>Employee type</SectionTitle>
+                <Text style={text}>Selected types narrow the selected departments and users. Leave departments and users empty to target everyone of these types. No type selection includes all types.</Text>
+                {EMPLOYEE_TYPES.map((type) => <View key={type} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <Switch accessibilityLabel={`Send to employee type ${type}`} disabled={busy} value={editor.target_employee_types.includes(type)} onValueChange={(checked) => setEditor({ ...editor, target_employee_types: checked ? [...editor.target_employee_types, type] : editor.target_employee_types.filter((value) => value !== type) })} />
+                    <Text style={text}>{type}</Text>
+                </View>)}
+                <SectionTitle>Role</SectionTitle>
+                <Text style={text}>Selected roles further narrow the audience. Leave other selections empty to target everyone with these roles.</Text>
+                <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }}>
+                    {audience?.roles.map((role) => <View key={role} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                        <Switch accessibilityLabel={`Send to role ${role}`} disabled={busy} value={editor.target_roles.includes(role)} onValueChange={(checked) => setEditor({ ...editor, target_roles: checked ? [...editor.target_roles, role] : editor.target_roles.filter((value) => value !== role) })} />
+                        <Text style={text}>{role}</Text>
+                    </View>)}
+                    {!audience?.roles.length && <Text style={text}>Assign roles on the users page to make them available here.</Text>}
+                </ScrollView>
                 <SectionTitle>Departments</SectionTitle>
                 <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }} keyboardShouldPersistTaps="handled">
                     {audience?.departments.filter((d) => d.toLowerCase().includes(recipientSearch.toLowerCase())).map((department) => <View key={department} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 6 }}>
@@ -103,6 +123,14 @@ export function PoliciesScreen() {
                 </ScrollView>
                 <Field label="Title"><AppInput value={editor.title} onChangeText={(title) => setEditor({ ...editor, title })} editable={!busy} /></Field>
                 <Field label="Policy text"><AppInput value={editor.body} onChangeText={(body) => setEditor({ ...editor, body })} multiline editable={!busy} style={{ minHeight: 240 }} /></Field>
+                <SectionTitle>Attachment (optional)</SectionTitle>
+                <Text style={text}>One file up to 5 MB. Recipients can download and save it.</Text>
+                {!!(editor.attachment?.name || existingAttachment) && <Text style={text}>{editor.attachment?.name ?? existingAttachment}{!editor.attachment && existingAttachment ? " (kept unless replaced)" : ""}</Text>}
+                <AppButton label={editor.attachment || existingAttachment ? "Replace attachment" : "Add attachment"} disabled={busy} onPress={() => void perform(async () => {
+                    const attachment = await pickPolicyAttachment();
+                    if (attachment) setEditor({ ...editor, attachment });
+                })} />
+                {editor.attachment && <AppButton label="Clear selected attachment" disabled={busy} onPress={() => setEditor({ ...editor, attachment: undefined })} />}
                 <Text style={text}>Publishing makes this version available immediately and requires the recipients to acknowledge it.</Text>
                 {!!policyEditorError(editor) && <Text style={text}>{policyEditorError(editor)}</Text>}
                 <AppButton label={busy ? "Publishing…" : "Publish policy"} variant="primary" disabled={busy || !!policyEditorError(editor)} onPress={() => void perform(save)} />
@@ -112,7 +140,11 @@ export function PoliciesScreen() {
                 <SectionTitle>{selected.title}</SectionTitle><Text style={text}>Version {selected.version} · {new Date(selected.updated_at).toLocaleString()}</Text>
                 <Text style={text}>Published by {selected.updated_by_upn}</Text>
                 <Text selectable style={[text, { lineHeight: 25, marginVertical: 16 }]}>{selected.body}</Text>
-                {canModify && <Text style={text}>Audience: {selected.recipient_upns == null ? "Everyone" : [...(selected.target_departments ?? []), ...(selected.target_users ?? [])].join(", ") + ` (${selected.recipient_upns.length} recipients)`}</Text>}
+                {selected.attachment_name && <>
+                    <Text style={text}>Attachment: {selected.attachment_name}</Text>
+                    <AppButton label="Download attachment" disabled={busy} onPress={() => void perform(() => downloadPolicyAttachment(apiFetch, selected))} />
+                </>}
+                {canModify && <Text style={text}>Audience: {selected.recipient_upns == null ? "Everyone" : [...(selected.target_roles ?? []).map((role) => `Role: ${role}`), ...(selected.target_employee_types ?? []).map((type) => `Type: ${type}`), ...(selected.target_departments ?? []), ...(selected.target_users ?? [])].join(", ") + ` (${selected.recipient_upns.length} recipients)`}</Text>}
                 {selected.requires_acknowledgement === false ? <Text style={text}>This policy is assigned to other recipients.</Text> : selected.acknowledged_at ? <Text style={text}>Acknowledged {new Date(selected.acknowledged_at).toLocaleString()}</Text> : <>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}><Switch accessibilityLabel="I have read this policy" value={confirmed} onValueChange={setConfirmed} /><Text style={[text, { flex: 1 }]}>I confirm that I have read version {selected.version} of this policy.</Text></View>
                     <AppButton label="Acknowledge policy" variant="primary" disabled={busy || !confirmed} onPress={() => void perform(acknowledge)} />

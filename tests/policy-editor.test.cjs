@@ -5,7 +5,7 @@ const { runInNewContext } = require('node:vm');
 const ts = require('typescript');
 const { outputText } = ts.transpileModule(readFileSync(require.resolve('../src/policy-editor.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } });
 const result = {};
-runInNewContext(outputText, { exports: result, Error });
+runInNewContext(outputText, { exports: result, Error, require: () => ({ isEmployeeType: (value) => ['Employee', 'Project Based', 'Intern'].includes(value) }) });
 const { createPolicyEditor, policyPublication, policyEditorError } = result;
 const valid = () => ({ ...createPolicyEditor(), title: ' Title ', body: ' Body ' });
 test('new policies send a numeric manual version and default to everyone', () => {
@@ -29,4 +29,33 @@ test('invalid and non-increasing versions are rejected before publication', () =
 });
 test('empty and oversized content is blocked', () => {
  for (const fields of [{ title: ' ' }, { title: 'x'.repeat(201) }, { body: ' ' }, { body: 'x'.repeat(100001) }]) assert.throws(() => policyPublication({ ...valid(), ...fields }));
+});
+
+
+test('attachments are published with the same payload used by the web API', () => {
+ const attachment = { name: 'policy.pdf', size: 3, data: 'YWJj' };
+ assert.equal(policyPublication({ ...valid(), attachment }).attachment, attachment);
+ assert.equal(policyPublication(valid()).attachment, undefined);
+ for (const invalid of [
+  { ...attachment, size: 0 }, { ...attachment, size: 5242881 },
+  { ...attachment, size: 4 }, { ...attachment, data: '!!!!' },
+  { ...attachment, name: '../policy.pdf' }, { ...attachment, name: 'x'.repeat(256) },
+ ]) assert.throws(() => policyPublication({ ...valid(), attachment: invalid }));
+});
+
+
+test('employee type targeting survives edits and validates allowed options', () => {
+ const editor = createPolicyEditor({ version: 1, title: 'Title', body: 'Body', target_employee_types: ['Intern'] });
+ assert.equal(editor.target_employee_types[0], 'Intern');
+ assert.equal(policyPublication(editor).target_employee_types[0], 'Intern');
+ assert.equal(createPolicyEditor().target_employee_types.length, 0);
+ assert.throws(() => policyPublication({ ...valid(), target_employee_types: ['Contractor'] }), /Employee, Project Based, or Intern/);
+});
+
+
+test('role targeting survives edits and rejects invalid role names', () => {
+ const editor = createPolicyEditor({ version: 2, title: 'Title', body: 'Body', target_roles: ['Engineer'] });
+ assert.equal(policyPublication(editor).target_roles[0], 'Engineer');
+ assert.equal(createPolicyEditor().target_roles.length, 0);
+ assert.throws(() => policyPublication({ ...valid(), target_roles: [''] }), /valid roles/);
 });

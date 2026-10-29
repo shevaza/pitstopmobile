@@ -1,3 +1,4 @@
+import { EMPLOYEE_TYPES, isEmployeeType } from "./employee-types";
 import { fetchCrossCheck } from "./cross-check-client";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -454,7 +455,8 @@ export function UserDetailScreen({ route }: any) {
       officeLocation: nextUser.officeLocation ?? "",
       mobilePhone: nextUser.mobilePhone ?? "",
       employeeId: nextUser.employeeId ?? "",
-      employeeType: nextUser.employeeType ?? "",
+      role: nextUser.role ?? "",
+      employeeType: isEmployeeType(nextUser.employeeType) ? nextUser.employeeType : "",
       usageLocation: nextUser.usageLocation ?? "",
       managerUPN: json.manager?.userPrincipalName ?? "",
     });
@@ -532,12 +534,16 @@ export function UserDetailScreen({ route }: any) {
         ["mobilePhone", "Mobile Phone"],
         ["employeeId", "Employee ID"],
         ["employeeType", "Employee Type"],
+        ["role", "Role"],
         ["usageLocation", "Usage Location"],
         ["managerUPN", "Manager UPN"],
       ].map(([key, label]) => (
         <Card key={key}>
           <Field label={label}>
-            <AppInput value={form[key] ?? ""} onChangeText={(value) => setForm((current) => ({ ...current, [key]: value }))} />
+            {key === "employeeType" ? <AppSelect accessibilityLabel="Employee Type" selectedValue={form[key] ?? ""} onValueChange={(value) => setForm((current) => ({ ...current, [key]: value }))}>
+              <AppSelect.Item label="Select employee type" value="" enabled={false} />
+              {EMPLOYEE_TYPES.map((type) => <AppSelect.Item key={type} label={type} value={type} />)}
+            </AppSelect> : <AppInput value={form[key] ?? ""} onChangeText={(value) => setForm((current) => ({ ...current, [key]: key === "role" ? value.slice(0, 100) : value }))} />}
           </Field>
         </Card>
       ))}
