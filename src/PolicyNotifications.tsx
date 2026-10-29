@@ -1,13 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from "react";
-import { AppState, Modal, Switch, Text, View } from "react-native";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type PropsWithChildren } from "react";
+import { AppState, Modal, Text } from "react-native";
 import { useAuth } from "./auth";
 import { useTheme } from "./ThemeProvider";
-import { AppButton, Card, Screen, SectionTitle } from "./ui";
-import { downloadPolicyAttachment } from "./policy-attachments";
+import { AppButton, Card, Screen } from "./ui";
 import type { Policy } from "./policy-types";
 
 const Context = createContext({ count: 0, refresh: async () => {} });
-export function PolicyNotificationProvider({ children }: PropsWithChildren) {
+export function PolicyNotificationProvider({ children, review }: PropsWithChildren<{ review: ReactNode }>) {
     const { apiFetch, session } = useAuth();
     const { theme } = useTheme();
     const api = useRef(apiFetch); api.current = apiFetch;
@@ -16,15 +15,15 @@ export function PolicyNotificationProvider({ children }: PropsWithChildren) {
     const [checkedToken, setCheckedToken] = useState("");
     const [policies, setPolicies] = useState<Policy[]>([]);
     const [error, setError] = useState("");
-    const [confirmed, setConfirmed] = useState(false);
-    const [busy, setBusy] = useState(false);
+    const [reviewToken, setReviewToken] = useState("");
     const refresh = useCallback(async () => {
-        if (!token) { setCheckedToken(""); setPolicies([]); setError(""); return; }
+        if (!token) { setCheckedToken(""); setReviewToken(""); setPolicies([]); setError(""); return; }
         try {
             const response = await api.current("/api/policies/required");
             if (!response.ok) throw new Error(await response.text());
             const result = await response.json();
             if (currentToken.current !== token) return;
+            if (!result.policies.length) setReviewToken("");
             setPolicies(result.policies); setCheckedToken(token); setError("");
         } catch (e) { if (currentToken.current === token) setError(e instanceof Error ? e.message : "Unable to check required policies."); }
     }, [token]);
@@ -34,35 +33,18 @@ export function PolicyNotificationProvider({ children }: PropsWithChildren) {
         const listener = AppState.addEventListener("change", (state) => { if (state === "active") void refresh(); });
         return () => { clearInterval(timer); listener.remove(); };
     }, [refresh]);
-    const policy = checkedToken === token ? policies[0] : undefined;
-    useEffect(() => { setConfirmed(false); }, [policy?.id, policy?.version]);
-    const blocked = !!token && (checkedToken !== token || !!error || policies.length > 0 || busy);
-    async function perform(action: () => Promise<void>) {
-        setBusy(true); setError("");
-        try { await action(); } catch (e) { setError(e instanceof Error ? e.message : "Request failed"); }
-        finally { setBusy(false); }
-    }
+    const blocked = !!token && (checkedToken !== token || !!error || policies.length > 0);
+    const reviewing = !!token && reviewToken === token && checkedToken === token;
     return <Context.Provider value={{ count: token ? policies.length : 0, refresh }}>
-        {!blocked && children}
-        <Modal visible={blocked} animationType="fade" presentationStyle="fullScreen" onRequestClose={() => {}}>
+        {blocked ? reviewing ? review : null : children}
+        <Modal visible={blocked && !reviewing} animationType="fade" presentationStyle="fullScreen" onRequestClose={() => {}}>
             <Screen title="Policy acknowledgement required" subtitle="Read and acknowledge all pending policies to continue." includeTopInset>
                 {!!error && <Card><Text accessibilityRole="alert" style={{ color: theme.colors.text }}>{error}</Text></Card>}
-                {policy && <Card>
-                    <Text style={{ color: theme.colors.text }}>{policies.length} remaining</Text>
-                    <SectionTitle>{policy.title} / Version {policy.version}</SectionTitle>
-                    <Text selectable style={{ color: theme.colors.text, lineHeight: 25 }}>{policy.body}</Text>
-                    {!!policy.attachment_name && <AppButton label={`Download: ${policy.attachment_name}`} disabled={busy} onPress={() => void perform(() => downloadPolicyAttachment(api.current, policy, true))} />}
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                        <Switch accessibilityLabel="I have read this policy" disabled={busy} value={confirmed} onValueChange={setConfirmed} />
-                        <Text style={{ color: theme.colors.text, flex: 1 }}>I have read this policy, version {policy.version}.</Text>
-                    </View>
-                    <AppButton label={busy ? "Saving..." : "Acknowledge and continue"} variant="primary" disabled={busy || !confirmed} onPress={() => void perform(async () => {
-                        const response = await api.current(`/api/policies/required/${policy.id}/acknowledge`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: policy.version }) });
-                        if (!response.ok) { const message = await response.text(); if (response.status === 409) await refresh(); throw new Error(message); }
-                        setConfirmed(false); await refresh();
-                    })} />
+                {checkedToken === token && policies.length > 0 && <Card>
+                    <Text style={{ color: theme.colors.text }}>You have {policies.length} pending {policies.length === 1 ? "policy" : "policies"} to acknowledge.</Text>
+                    <AppButton label="Go to Policies" variant="primary" onPress={() => setReviewToken(token)} />
                 </Card>}
-                {(!policy || error) && <AppButton label={error ? "Retry" : "Checking required policies..."} disabled={busy} onPress={() => void perform(refresh)} />}
+                {(checkedToken !== token || error) && <AppButton label={error ? "Retry" : "Checking required policies..."} onPress={() => void refresh()} />}
             </Screen>
         </Modal>
     </Context.Provider>;

@@ -8,6 +8,7 @@ export type PolicyEditor = {
     title: string;
     body: string;
     attachment?: PolicyAttachment;
+    remove_attachment?: boolean;
     target_roles: string[];
     target_employee_types: string[];
     target_departments: string[];
@@ -40,6 +41,7 @@ export function policyEditorError(editor: PolicyEditor): string | null {
     }
     if (!editor.title.trim() || editor.title.trim().length > 200) return "Enter a title of 1 to 200 characters.";
     if (!editor.body.trim() || editor.body.trim().length > 100000) return "Enter policy text of 1 to 100000 characters.";
+    if (editor.attachment && editor.remove_attachment) return "Choose attachment replacement or removal.";
     if (editor.attachment) {
         const { name, size, data } = editor.attachment;
         if (!name.trim() || name.length > 255 || /[\x00-\x1f\x7f/\\]/.test(name)) return "Choose an attachment with a valid file name (up to 255 characters).";

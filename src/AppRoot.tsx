@@ -3,6 +3,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "./auth";
 import { AppNavigator } from "./navigation";
 import { ThemeProvider, useTheme } from "./ThemeProvider";
+import { RequiredPolicyReview } from "./RequiredPolicyReview";
 import { PolicyNotificationProvider } from "./PolicyNotifications";
 
 function ThemedApp() {
@@ -10,7 +11,7 @@ function ThemedApp() {
   return (
     <AuthProvider>
       <StatusBar style={theme.mode === "light" ? "dark" : "light"} />
-      <PolicyNotificationProvider><AppNavigator /></PolicyNotificationProvider>
+      <PolicyNotificationProvider review={<RequiredPolicyReview />}><AppNavigator /></PolicyNotificationProvider>
     </AuthProvider>
   );
 }

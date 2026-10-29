@@ -59,3 +59,12 @@ test('role targeting survives edits and rejects invalid role names', () => {
  assert.equal(createPolicyEditor().target_roles.length, 0);
  assert.throws(() => policyPublication({ ...valid(), target_roles: [''] }), /valid roles/);
 });
+
+
+test('mobile attachment edits support removal or replacement but not both', () => {
+ const editor = { ...valid(), id: 'id', version: '2', expectedVersion: 1, remove_attachment: true };
+ assert.equal(policyPublication(editor).remove_attachment, true);
+ const attachment = { name: 'replacement.pdf', size: 3, data: 'YWJj' };
+ assert.throws(() => policyPublication({ ...editor, attachment }), /replacement or removal/);
+ assert.equal(policyPublication({ ...editor, attachment, remove_attachment: false }).attachment, attachment);
+});

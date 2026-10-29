@@ -1,7 +1,7 @@
 import { EMPLOYEE_TYPES } from "./employee-types";
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ScrollView, Switch, Text, View } from "react-native";
+import { Alert, ScrollView, Switch, Text, View } from "react-native";
 import { useAuth } from "./auth";
 import { useTheme } from "./ThemeProvider";
 import { AppButton, AppInput, Badge, Card, Field, LoadingBlock, Screen, SectionTitle } from "./ui";
@@ -62,6 +62,17 @@ export function PoliciesScreen() {
         setEditor(null); setSelected(null); setReport(null);
         setNotice("Policy published. Recipients must acknowledge this version.");
         await load(); await refresh();
+    }
+    function changeStatus(action: "hide" | "show" | "delete") {
+        if (!selected) return;
+        Alert.alert(action === "delete" ? "Delete policy?" : action === "hide" ? "Hide policy?" : "Show policy?", action === "delete" ? "The policy will be removed from the library. Revision and acknowledgement history will be retained for audit." : action === "hide" ? "Recipients will no longer see this policy or need to acknowledge it." : "The policy will be visible again and pending acknowledgements will be required.", [
+            { text: "Cancel", style: "cancel" },
+            { text: action === "delete" ? "Delete" : "Confirm", style: action === "delete" ? "destructive" : "default", onPress: () => void perform(async () => {
+                const response = await apiFetch(`/api/policies/${selected.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, version: selected.version }) });
+                if (!response.ok) throw new Error(await response.text());
+                await load(); await refresh(); setNotice(action === "delete" ? "Policy deleted." : action === "hide" ? "Policy hidden." : "Policy visible to recipients.");
+            }) },
+        ]);
     }
     async function acknowledge() {
         if (!selected || !confirmed) return;
@@ -128,9 +139,11 @@ export function PoliciesScreen() {
                 {!!(editor.attachment?.name || existingAttachment) && <Text style={text}>{editor.attachment?.name ?? existingAttachment}{!editor.attachment && existingAttachment ? " (kept unless replaced)" : ""}</Text>}
                 <AppButton label={editor.attachment || existingAttachment ? "Replace attachment" : "Add attachment"} disabled={busy} onPress={() => void perform(async () => {
                     const attachment = await pickPolicyAttachment();
-                    if (attachment) setEditor({ ...editor, attachment });
+                    if (attachment) setEditor({ ...editor, attachment, remove_attachment: false });
                 })} />
                 {editor.attachment && <AppButton label="Clear selected attachment" disabled={busy} onPress={() => setEditor({ ...editor, attachment: undefined })} />}
+                {existingAttachment && <AppButton label={editor.remove_attachment ? "Keep current attachment" : "Remove current attachment"} disabled={busy} onPress={() => setEditor({ ...editor, attachment: undefined, remove_attachment: !editor.remove_attachment })} />}
+                {editor.remove_attachment && <Text style={text}>The attachment will be removed when you publish this version.</Text>}
                 <Text style={text}>Publishing makes this version available immediately and requires the recipients to acknowledge it.</Text>
                 {!!policyEditorError(editor) && <Text style={text}>{policyEditorError(editor)}</Text>}
                 <AppButton label={busy ? "Publishing…" : "Publish policy"} variant="primary" disabled={busy || !!policyEditorError(editor)} onPress={() => void perform(save)} />
@@ -145,12 +158,14 @@ export function PoliciesScreen() {
                     <AppButton label="Download attachment" disabled={busy} onPress={() => void perform(() => downloadPolicyAttachment(apiFetch, selected))} />
                 </>}
                 {canModify && <Text style={text}>Audience: {selected.recipient_upns == null ? "Everyone" : [...(selected.target_roles ?? []).map((role) => `Role: ${role}`), ...(selected.target_employee_types ?? []).map((type) => `Type: ${type}`), ...(selected.target_departments ?? []), ...(selected.target_users ?? [])].join(", ") + ` (${selected.recipient_upns.length} recipients)`}</Text>}
-                {selected.requires_acknowledgement === false ? <Text style={text}>This policy is assigned to other recipients.</Text> : selected.acknowledged_at ? <Text style={text}>Acknowledged {new Date(selected.acknowledged_at).toLocaleString()}</Text> : <>
+                {selected.is_hidden ? <Text style={text}>This policy is hidden from recipients.</Text> : selected.requires_acknowledgement === false ? <Text style={text}>This policy is assigned to other recipients.</Text> : selected.acknowledged_at ? <Text style={text}>Acknowledged {new Date(selected.acknowledged_at).toLocaleString()}</Text> : <>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}><Switch accessibilityLabel="I have read this policy" value={confirmed} onValueChange={setConfirmed} /><Text style={[text, { flex: 1 }]}>I confirm that I have read version {selected.version} of this policy.</Text></View>
                     <AppButton label="Acknowledge policy" variant="primary" disabled={busy || !confirmed} onPress={() => void perform(acknowledge)} />
                 </>}
                 {canModify && <>
-                    <AppButton label="Edit policy" disabled={busy} onPress={() => void perform(() => openEditor(selected))} />
+                    <AppButton label="Edit policy / attachment" disabled={busy} onPress={() => void perform(() => openEditor(selected))} />
+                    <AppButton label={selected.is_hidden ? "Show policy" : "Hide policy"} disabled={busy} onPress={() => changeStatus(selected.is_hidden ? "show" : "hide")} />
+                    <AppButton label="Delete policy" disabled={busy} onPress={() => changeStatus("delete")} />
                     <AppButton label="View acknowledgements" disabled={busy} onPress={() => void perform(async () => {
                         const res = await apiFetch(`/api/policies/${selected.id}/acknowledgements`);
                         if (!res.ok) throw new Error(await res.text());
@@ -161,7 +176,7 @@ export function PoliciesScreen() {
                 <AppButton label="Close policy" disabled={busy} onPress={() => { setSelected(null); setReport(null); }} />
             </Card>}
             {filtered.map((policy) => <Card key={policy.id}>
-                <Badge label={policy.requires_acknowledgement === false ? "Assigned to other recipients" : policy.acknowledged_at ? "Acknowledged" : policy.version === 1 ? "New · Acknowledgement required" : "Updated · Acknowledgement required"} tone={policy.requires_acknowledgement === false ? "info" : policy.acknowledged_at ? "success" : "warning"} />
+                <Badge label={policy.is_hidden ? "Hidden" : policy.requires_acknowledgement === false ? "Assigned to other recipients" : policy.acknowledged_at ? "Acknowledged" : policy.version === 1 ? "New · Acknowledgement required" : "Updated · Acknowledgement required"} tone={policy.requires_acknowledgement === false ? "info" : policy.acknowledged_at ? "success" : "warning"} />
                 <SectionTitle>{policy.title}</SectionTitle><Text style={text}>Version {policy.version} · {new Date(policy.updated_at).toLocaleDateString()}</Text>
                 <Text style={text} numberOfLines={2}>{policy.body}</Text>
                 <AppButton label="Read policy" disabled={busy} onPress={() => { setSelected(policy); setConfirmed(false); setReport(null); setEditor(null); scrollRef.current?.scrollTo({ y: 0, animated: true }); }} />
